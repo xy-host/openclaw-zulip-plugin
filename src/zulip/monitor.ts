@@ -152,6 +152,16 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
         const patternMatch = core.channel.mentions.matchesMentionPatterns(rawText, mentionRegexes);
         if (!mentioned && !patternMatch) return;
       }
+      // For auto-reply streams, only respond to allowed senders
+      if (inAutoReplyStream) {
+        const streamAllowFrom = await getEffectiveAllowFrom();
+        if (streamAllowFrom.length > 0 && !isSenderAllowed({
+          senderId,
+          senderEmail,
+          senderName,
+          allowFrom: streamAllowFrom,
+        })) return;
+      }
     }
 
     // DM policy
