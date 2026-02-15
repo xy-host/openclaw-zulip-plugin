@@ -210,7 +210,9 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
     // Acknowledge message with 👀 reaction
     try {
       await addZulipReaction(client, msg.id, "eyes");
-    } catch {}
+    } catch (err) {
+      logger.warn?.(`failed to add reaction to msg ${msg.id}: ${err}`);
+    }
 
     core.channel.activity.record({
       channel: "zulip",
