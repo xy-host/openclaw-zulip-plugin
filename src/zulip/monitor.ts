@@ -230,7 +230,7 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
       accountId: account.accountId,
       peer: {
         kind: isDm ? "direct" : "channel",
-        id: isDm ? senderId : (streamInfo?.streamName ?? senderId),
+        id: isDm ? senderId : (streamInfo ? `${streamInfo.streamName}:${streamInfo.topic}` : senderId),
       },
     });
 
