@@ -105,6 +105,13 @@ export async function registerZulipEventQueue(
   return { queue_id: data.queue_id, last_event_id: data.last_event_id };
 }
 
+export class BadEventQueueError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BadEventQueueError";
+  }
+}
+
 export async function pollZulipEvents(
   client: ZulipClient,
   queueId: string,
@@ -117,13 +124,29 @@ export async function pollZulipEvents(
   const url = `${client.serverUrl}/api/v1/events?${params.toString()}`;
   const headers = new Headers();
   headers.set("Authorization", client.authHeader);
-  const res = await fetch(url, { headers, signal });
-  if (!res.ok) {
-    const detail = await readZulipError(res);
-    throw new Error(`Zulip poll ${res.status}: ${detail}`);
+  // Timeout for long-polling: 90s (Zulip server default is ~60s)
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90_000);
+  const combinedSignal = signal
+    ? AbortSignal.any([signal, controller.signal])
+    : controller.signal;
+  try {
+    const res = await fetch(url, { headers, signal: combinedSignal });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      const detail = await readZulipError(res);
+      // Detect expired/invalid queue
+      if (res.status === 400 && detail.includes("BAD_EVENT_QUEUE_ID")) {
+        throw new BadEventQueueError(`Queue expired: ${detail}`);
+      }
+      throw new Error(`Zulip poll ${res.status}: ${detail}`);
+    }
+    const data = (await res.json()) as { events: ZulipEvent[] };
+    return data.events ?? [];
+  } catch (err) {
+    clearTimeout(timeout);
+    throw err;
   }
-  const data = (await res.json()) as { events: ZulipEvent[] };
-  return data.events ?? [];
 }
 
 export async function sendZulipApiMessage(

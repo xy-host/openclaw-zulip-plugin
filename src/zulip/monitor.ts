@@ -19,6 +19,7 @@ import {
   pollZulipEvents,
   sendZulipTyping,
   addZulipReaction,
+  BadEventQueueError,
   type ZulipClient,
   type ZulipMessage,
 } from "./client.js";
@@ -388,6 +389,7 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
     try {
       const queue = await registerZulipEventQueue(client);
       let lastEventId = queue.last_event_id;
+      logger.info?.(`zulip event queue registered: ${queue.queue_id}`);
       opts.statusSink?.({ connected: true, lastConnectedAt: Date.now(), lastError: null });
       backoffMs = 1000;
 
@@ -413,6 +415,11 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
         lastError: errStr,
         lastDisconnect: { at: Date.now(), error: errStr },
       });
+      // Bad queue → re-register immediately without backoff
+      if (err instanceof BadEventQueueError) {
+        logger.info?.("zulip queue expired, re-registering immediately");
+        continue;
+      }
       await new Promise((r) => setTimeout(r, backoffMs));
       backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
     }
