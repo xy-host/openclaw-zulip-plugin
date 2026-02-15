@@ -268,6 +268,21 @@ export async function getZulipStreamMembers(
   return data.subscribers ?? [];
 }
 
+// ── Emoji Reactions ──
+
+export async function addZulipReaction(
+  client: ZulipClient,
+  messageId: number,
+  emojiName: string,
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("emoji_name", emojiName);
+  await client.request<{ result: string }>(`/messages/${messageId}/reactions`, {
+    method: "POST",
+    body: body.toString(),
+  });
+}
+
 // ── Typing indicator ──
 
 export async function sendZulipTyping(

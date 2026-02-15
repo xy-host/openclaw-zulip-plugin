@@ -18,6 +18,7 @@ import {
   registerZulipEventQueue,
   pollZulipEvents,
   sendZulipTyping,
+  addZulipReaction,
   type ZulipClient,
   type ZulipMessage,
 } from "./client.js";
@@ -205,6 +206,11 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
 
     const bodyText = stripMention(rawText, botName);
     if (!bodyText) return;
+
+    // Acknowledge message with 👀 reaction
+    try {
+      await addZulipReaction(client, msg.id, "eyes");
+    } catch {}
 
     core.channel.activity.record({
       channel: "zulip",
