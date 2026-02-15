@@ -320,18 +320,27 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
       },
     });
 
+    // Send queue to ensure message ordering (prevents out-of-order delivery)
+    let sendChain = Promise.resolve();
+    const enqueueSend = (fn: () => Promise<void>): Promise<void> => {
+      sendChain = sendChain.then(fn, fn);
+      return sendChain;
+    };
+
     const { dispatcher, replyOptions, markDispatchIdle } =
       core.channel.reply.createReplyDispatcherWithTyping({
         ...prefixOptions,
         humanDelay: core.channel.reply.resolveHumanDelayConfig(cfg, route.agentId),
         deliver: async (payload: ReplyPayload) => {
-          const text = core.channel.text.convertMarkdownTables(payload.text ?? "", tableMode);
-          const chunkMode = core.channel.text.resolveChunkMode(cfg, "zulip", account.accountId);
-          const chunks = core.channel.text.chunkMarkdownTextWithMode(text, textLimit, chunkMode);
-          for (const chunk of chunks.length > 0 ? chunks : [text]) {
-            if (!chunk) continue;
-            await sendZulipMessage(to, chunk, { accountId: account.accountId });
-          }
+          await enqueueSend(async () => {
+            const text = core.channel.text.convertMarkdownTables(payload.text ?? "", tableMode);
+            const chunkMode = core.channel.text.resolveChunkMode(cfg, "zulip", account.accountId);
+            const chunks = core.channel.text.chunkMarkdownTextWithMode(text, textLimit, chunkMode);
+            for (const chunk of chunks.length > 0 ? chunks : [text]) {
+              if (!chunk) continue;
+              await sendZulipMessage(to, chunk, { accountId: account.accountId });
+            }
+          });
         },
         onError: (err, info) => {
           logger.error?.(`zulip ${info.kind} reply failed: ${String(err)}`);
