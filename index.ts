@@ -40,6 +40,7 @@ import {
   createZulipDraft,
   editZulipDraft,
   deleteZulipDraft,
+  deleteZulipTopic,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -1966,6 +1967,320 @@ const plugin = {
                 {
                   type: "text",
                   text: `Draft ${params.draftId} deleted \u2705`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_topics",
+      description:
+        "Manage Zulip topics: resolve/unresolve, rename, move to another stream, or delete. " +
+        "Topics are central to Zulip's organization model. Resolving a topic marks it as done " +
+        "with a ✔ prefix. Moving topics lets you reorganize conversations across streams.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["resolve", "unresolve", "rename", "move", "delete"],
+            description: "Action to perform",
+          },
+          streamName: {
+            type: "string",
+            description: "Current stream name where the topic lives (required for all actions)",
+          },
+          topic: {
+            type: "string",
+            description: "Current topic name (required for all actions)",
+          },
+          newTopic: {
+            type: "string",
+            description: "New topic name (for rename action)",
+          },
+          targetStreamName: {
+            type: "string",
+            description:
+              "Destination stream name to move the topic into (for move action). " +
+              "If omitted during move, the topic stays in the same stream but is renamed (equivalent to rename).",
+          },
+          propagateMode: {
+            type: "string",
+            enum: ["change_all", "change_later", "change_one"],
+            description:
+              "How to propagate topic changes (for resolve/unresolve/rename/move). " +
+              "'change_all' = all messages in topic (default), " +
+              "'change_later' = this and later messages, " +
+              "'change_one' = only the anchor message.",
+          },
+        },
+        required: ["action", "streamName", "topic"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+        const propagateMode = params.propagateMode ?? "change_all";
+
+        // Resolve stream name to stream object
+        const stream =
+          (await listZulipSubscriptions(client)).find(
+            (s) => s.name.toLowerCase() === params.streamName.toLowerCase(),
+          ) ??
+          (await listZulipStreams(client)).find(
+            (s) => s.name.toLowerCase() === params.streamName.toLowerCase(),
+          );
+        if (!stream) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: stream "${params.streamName}" not found.`,
+              },
+            ],
+          };
+        }
+
+        // For resolve/unresolve/rename/move we need a message ID in the topic
+        // to use as an anchor for the PATCH /messages/{id} endpoint.
+        const findAnchorMessage = async (): Promise<number | null> => {
+          const result = await getZulipMessages(client, {
+            anchor: "newest",
+            numBefore: 1,
+            numAfter: 0,
+            narrow: [
+              { operator: "stream", operand: params.streamName },
+              { operator: "topic", operand: params.topic },
+            ],
+          });
+          if (result.messages.length === 0) return null;
+          return result.messages[0].id;
+        };
+
+        switch (params.action) {
+          case "resolve": {
+            const RESOLVED_PREFIX = "\u2714 ";
+            if (params.topic.startsWith(RESOLVED_PREFIX)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Topic "${params.topic}" is already resolved.`,
+                  },
+                ],
+              };
+            }
+            const msgId = await findAnchorMessage();
+            if (msgId === null) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: no messages found in #${params.streamName} > ${params.topic}.`,
+                  },
+                ],
+              };
+            }
+            const resolvedTopic = `${RESOLVED_PREFIX}${params.topic}`;
+            await updateZulipMessage(client, msgId, {
+              topic: resolvedTopic,
+              propagateMode,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Topic resolved: #${params.streamName} > ${resolvedTopic} \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "unresolve": {
+            const RESOLVED_PREFIX = "\u2714 ";
+            if (!params.topic.startsWith(RESOLVED_PREFIX)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Topic "${params.topic}" is not resolved (no \u2714 prefix).`,
+                  },
+                ],
+              };
+            }
+            const msgId = await findAnchorMessage();
+            if (msgId === null) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: no messages found in #${params.streamName} > ${params.topic}.`,
+                  },
+                ],
+              };
+            }
+            const unresolvedTopic = params.topic.slice(RESOLVED_PREFIX.length);
+            await updateZulipMessage(client, msgId, {
+              topic: unresolvedTopic,
+              propagateMode,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Topic unresolved: #${params.streamName} > ${unresolvedTopic} \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "rename": {
+            if (!params.newTopic) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: newTopic is required for rename.",
+                  },
+                ],
+              };
+            }
+            const msgId = await findAnchorMessage();
+            if (msgId === null) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: no messages found in #${params.streamName} > ${params.topic}.`,
+                  },
+                ],
+              };
+            }
+            await updateZulipMessage(client, msgId, {
+              topic: params.newTopic,
+              propagateMode,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Topic renamed: #${params.streamName} > ${params.topic} \u2192 ${params.newTopic} \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "move": {
+            if (!params.targetStreamName && !params.newTopic) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide targetStreamName and/or newTopic for move.",
+                  },
+                ],
+              };
+            }
+            const msgId = await findAnchorMessage();
+            if (msgId === null) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: no messages found in #${params.streamName} > ${params.topic}.`,
+                  },
+                ],
+              };
+            }
+
+            // Build the PATCH body manually since updateZulipMessage
+            // doesn't support stream_id changes
+            const body = new URLSearchParams();
+            if (params.newTopic) {
+              body.set("topic", params.newTopic);
+            }
+            body.set("propagate_mode", propagateMode);
+
+            let targetLabel = params.streamName;
+            if (params.targetStreamName) {
+              const targetStream =
+                (await listZulipSubscriptions(client)).find(
+                  (s) =>
+                    s.name.toLowerCase() ===
+                    params.targetStreamName.toLowerCase(),
+                ) ??
+                (await listZulipStreams(client)).find(
+                  (s) =>
+                    s.name.toLowerCase() ===
+                    params.targetStreamName.toLowerCase(),
+                );
+              if (!targetStream) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: target stream "${params.targetStreamName}" not found.`,
+                    },
+                  ],
+                };
+              }
+              body.set("stream_id", String(targetStream.stream_id));
+              targetLabel = params.targetStreamName;
+            }
+
+            await client.request<{ result: string }>(
+              `/messages/${msgId}`,
+              { method: "PATCH", body: body.toString() },
+            );
+
+            const finalTopic = params.newTopic ?? params.topic;
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Topic moved: #${params.streamName} > ${params.topic} \u2192 #${targetLabel} > ${finalTopic} \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "delete": {
+            // Use the dedicated delete_topic endpoint which deletes all messages in the topic.
+            // It processes in batches; repeat if not complete.
+            let complete = false;
+            let rounds = 0;
+            const maxRounds = 20; // safety limit
+            while (!complete && rounds < maxRounds) {
+              const result = await deleteZulipTopic(
+                client,
+                stream.stream_id,
+                params.topic,
+              );
+              complete = result.complete;
+              rounds++;
+            }
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: complete
+                    ? `Topic deleted: #${params.streamName} > ${params.topic} \u2705`
+                    : `Topic deletion in progress (${rounds} batch(es) processed). ` +
+                      `Some messages may remain; repeat the action to continue.`,
                 },
               ],
             };

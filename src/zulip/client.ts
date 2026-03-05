@@ -895,3 +895,24 @@ export async function deleteZulipDraft(
     method: "DELETE",
   });
 }
+
+// ── Topics ──
+
+/**
+ * Delete a topic by removing all messages in it.
+ * This is an admin-only endpoint. The server processes deletions in batches;
+ * when `complete` is false the caller should repeat the request.
+ */
+export async function deleteZulipTopic(
+  client: ZulipClient,
+  streamId: number,
+  topicName: string,
+): Promise<{ complete: boolean }> {
+  const body = new URLSearchParams();
+  body.set("topic_name", topicName);
+  const data = await client.request<{ complete: boolean; result: string }>(
+    `/streams/${streamId}/delete_topic`,
+    { method: "POST", body: body.toString() },
+  );
+  return { complete: data.complete };
+}

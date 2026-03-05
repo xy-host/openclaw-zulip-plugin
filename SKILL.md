@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Eight tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
+Nine tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -157,6 +157,31 @@ List, create, edit, or delete message drafts. Actions:
 - When editing, only `content` is required — the target (stream/DM) is preserved from the original draft unless you override it with `streamName` or `userId`
 - Use drafts to prepare messages that need review before sending
 
+
+### `zulip_topics`
+Manage topics within streams: resolve, unresolve, rename, move, or delete. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `resolve` | `streamName`, `topic` | Mark a topic as resolved by prepending ✔ to its name |
+| `unresolve` | `streamName`, `topic` | Remove the ✔ resolved prefix from a topic |
+| `rename` | `streamName`, `topic`, `newTopic` | Rename a topic within the same stream |
+| `move` | `streamName`, `topic` + `targetStreamName` and/or `newTopic` | Move a topic to a different stream (and optionally rename it) |
+| `delete` | `streamName`, `topic` | Delete all messages in a topic (admin-only) |
+
+**Parameters**:
+- `streamName` — the stream where the topic currently lives (required for all actions)
+- `topic` — the current topic name (required for all actions; include the ✔ prefix for unresolve)
+- `newTopic` — new topic name (for rename and optionally for move)
+- `targetStreamName` — destination stream name (for move)
+- `propagateMode` — how to apply changes: `change_all` (default), `change_later`, or `change_one`
+
+**Tips**:
+- Resolving adds `✔ ` (checkmark + space) to the topic name — this is Zulip's standard resolved topic convention
+- To unresolve, pass the full topic name including the `✔ ` prefix as the `topic` parameter
+- `move` can move a topic to another stream, rename it, or both
+- `delete` permanently removes all messages in the topic — use with caution, typically admin-only
+- The `propagateMode` parameter defaults to `change_all` which applies the change to all messages in the topic
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:
