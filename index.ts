@@ -102,6 +102,11 @@ const plugin = {
       parameters: {
         type: "object",
         properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
           action: {
             type: "string",
             enum: [
@@ -142,7 +147,7 @@ const plugin = {
       },
       async execute(_id: string, params: any) {
         const cfg = api.runtime.config.loadConfig();
-        const client = getClient(cfg);
+        const client = getClient(cfg, params.accountId);
 
         switch (params.action) {
           case "list_all": {
@@ -312,6 +317,11 @@ const plugin = {
       parameters: {
         type: "object",
         properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
           streamName: {
             type: "string",
             description: "Stream name to send to",
@@ -333,7 +343,7 @@ const plugin = {
       },
       async execute(_id: string, params: any) {
         const cfg = api.runtime.config.loadConfig();
-        const client = getClient(cfg);
+        const client = getClient(cfg, params.accountId);
 
         if (params.streamName) {
           const result = await sendZulipApiMessage(client, {
@@ -385,6 +395,11 @@ const plugin = {
       parameters: {
         type: "object",
         properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
           action: {
             type: "string",
             enum: ["list", "get", "get_by_email", "presence"],
@@ -412,7 +427,7 @@ const plugin = {
       },
       async execute(_id: string, params: any) {
         const cfg = api.runtime.config.loadConfig();
-        const client = getClient(cfg);
+        const client = getClient(cfg, params.accountId);
 
         switch (params.action) {
           case "list": {
@@ -547,6 +562,11 @@ const plugin = {
       parameters: {
         type: "object",
         properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
           action: {
             type: "string",
             enum: [
@@ -614,7 +634,7 @@ const plugin = {
       },
       async execute(_id: string, params: any) {
         const cfg = api.runtime.config.loadConfig();
-        const client = getClient(cfg);
+        const client = getClient(cfg, params.accountId);
 
         switch (params.action) {
           case "get": {
@@ -822,6 +842,11 @@ const plugin = {
       parameters: {
         type: "object",
         properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
           action: {
             type: "string",
             enum: ["list", "create", "edit", "delete"],
@@ -862,7 +887,7 @@ const plugin = {
       },
       async execute(_id: string, params: any) {
         const cfg = api.runtime.config.loadConfig();
-        const client = getClient(cfg);
+        const client = getClient(cfg, params.accountId);
 
         switch (params.action) {
           case "list": {

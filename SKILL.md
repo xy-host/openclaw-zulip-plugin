@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Four tools are available:
+Five tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -155,6 +155,12 @@ When the agent receives a message from a Zulip stream:
 
 - Use `zulip_send` with `userId` (numeric Zulip user ID, as a string)
 - You need the user's Zulip ID — use `zulip_users` → `list` or `get_by_email` to find IDs
+
+## Multi-Account
+
+All five tools accept an optional `accountId` parameter. When your configuration defines multiple Zulip accounts under `channels.zulip.accounts`, pass `accountId` to target a specific account. If omitted, the primary/default account is used.
+
+Example: `{ "action": "list_all", "accountId": "work" }` — lists streams on the "work" Zulip account.
 
 ## Common Pitfalls
 
