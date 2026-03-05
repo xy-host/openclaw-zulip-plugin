@@ -840,7 +840,7 @@ const plugin = {
           topic: {
             type: "string",
             description:
-              "Topic within the stream (for create/edit, required when targeting a stream).",
+              "Topic within the stream (for create/edit when targeting a stream). If omitted for a stream target, the topic defaults to \"(no topic)\".",
           },
           userId: {
             type: "string",
@@ -944,13 +944,32 @@ const plugin = {
               };
             }
 
+            if (params.streamName && params.userId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide only one of streamName or userId for create.",
+                  },
+                ],
+              };
+            }
+
             if (params.streamName) {
-              // Need to resolve stream name to stream ID
-              const streams = await listZulipStreams(client);
-              const stream = streams.find(
-                (s) =>
-                  s.name.toLowerCase() === params.streamName.toLowerCase(),
-              );
+              // Resolve stream name to ID; try subscriptions first (includes private streams),
+              // then fall back to all public streams
+              const stream =
+                (await listZulipSubscriptions(client)).find(
+                  (s) =>
+                    s.name.toLowerCase() ===
+                    params.streamName.toLowerCase(),
+                ) ??
+                (await listZulipStreams(client)).find(
+                  (s) =>
+                    s.name.toLowerCase() ===
+                    params.streamName.toLowerCase(),
+                );
+
               if (!stream) {
                 return {
                   content: [
@@ -983,9 +1002,20 @@ const plugin = {
                 ],
               };
             } else if (params.userId) {
+              const userId = Number(params.userId);
+              if (!Number.isFinite(userId) || userId <= 0) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: "Error: userId must be a valid positive numeric user ID.",
+                    },
+                  ],
+                };
+              }
               const result = await createZulipScheduledMessage(client, {
                 type: "direct",
-                to: [Number(params.userId)],
+                to: [userId],
                 content: params.content,
                 scheduledDeliveryTimestamp: deliverTimestamp,
               });

@@ -91,7 +91,7 @@ Create, list, edit, or delete scheduled messages. Actions:
 
 **Create parameters**:
 - `streamName` — target stream name (mutually exclusive with `userId`)
-- `topic` — topic within the stream (required for stream messages)
+- `topic` — topic within the stream (for stream messages; if omitted, defaults to "(no topic)" — always provide a topic)
 - `userId` — target user ID for DM (mutually exclusive with `streamName`)
 - `content` — message content in Zulip markdown
 - `scheduledAt` — ISO 8601 datetime string for delivery, e.g. `2025-12-31T09:00:00Z` (must be in the future)
