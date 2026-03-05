@@ -402,3 +402,63 @@ export async function uploadZulipFile(
   const data = (await res.json()) as { uri: string };
   return { uri: data.uri };
 }
+
+// ── Users ──
+
+export type ZulipUser = {
+  user_id: number;
+  email: string;
+  full_name: string;
+  is_bot: boolean;
+  is_active: boolean;
+  role: number;
+  avatar_url?: string;
+  date_joined?: string;
+  timezone?: string;
+};
+
+export type ZulipPresence = {
+  [client: string]: {
+    status: "active" | "idle" | "offline";
+    timestamp: number;
+  };
+};
+
+export type ZulipUserPresence = {
+  presence: ZulipPresence;
+};
+
+export async function listZulipUsers(
+  client: ZulipClient,
+): Promise<ZulipUser[]> {
+  const data = await client.request<{ members: ZulipUser[] }>("/users");
+  return data.members ?? [];
+}
+
+export async function getZulipUser(
+  client: ZulipClient,
+  userId: number,
+): Promise<ZulipUser> {
+  const data = await client.request<{ user: ZulipUser }>(`/users/${userId}`);
+  return data.user;
+}
+
+export async function getZulipUserByEmail(
+  client: ZulipClient,
+  email: string,
+): Promise<ZulipUser> {
+  const data = await client.request<{ user: ZulipUser }>(
+    `/users/${encodeURIComponent(email)}`,
+  );
+  return data.user;
+}
+
+export async function getZulipUserPresence(
+  client: ZulipClient,
+  userId: number,
+): Promise<ZulipUserPresence> {
+  const data = await client.request<{ presence: ZulipPresence }>(
+    `/users/${userId}/presence`,
+  );
+  return { presence: data.presence };
+}
