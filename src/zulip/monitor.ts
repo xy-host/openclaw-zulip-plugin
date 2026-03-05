@@ -151,6 +151,9 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
     const chatType: ChatType = isDm ? "direct" : "channel";
     const rawText = msg.content?.trim() ?? "";
 
+    // Resolve allowFrom once for use in both stream and DM checks
+    const effectiveAllowFrom = await getEffectiveAllowFrom();
+
     // For stream messages, check auto-reply streams first, then require mention
     if (!isDm) {
       const inAutoReplyStream = streamInfo && autoReplyStreams.some(
@@ -163,17 +166,15 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
         if (!mentioned && !patternMatch) return;
       }
       // For all stream messages (auto-reply or @mention), check allowFrom if configured
-      const streamAllowFrom = await getEffectiveAllowFrom();
-      if (streamAllowFrom.length > 0 && !isSenderAllowed({
+      if (effectiveAllowFrom.length > 0 && !isSenderAllowed({
         senderId,
         senderEmail,
         senderName,
-        allowFrom: streamAllowFrom,
+        allowFrom: effectiveAllowFrom,
       })) return;
     }
 
     // DM policy
-    const effectiveAllowFrom = await getEffectiveAllowFrom();
     if (isDm) {
       if (dmPolicy === "disabled") return;
       const senderAllowed = isSenderAllowed({
