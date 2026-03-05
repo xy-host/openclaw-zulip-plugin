@@ -10,6 +10,7 @@ A custom [Zulip](https://zulip.com) channel plugin for [OpenClaw](https://github
 - **Typing indicators** — shows typing status in both DMs and stream topics
 - **Stream management** — create, update, delete, join/leave streams via agent tools
 - **Mention detection** — responds to @mentions in any stream
+- **Multi-bot conversation** — multiple bots can converse with loop prevention
 
 ## Installation
 
@@ -38,6 +39,48 @@ A custom [Zulip](https://zulip.com) channel plugin for [OpenClaw](https://github
 
 3. Restart OpenClaw gateway
 
+## Multi-Bot Conversation
+
+Multiple OpenClaw bot instances can converse with each other in the same stream/topic or DM. To enable:
+
+```json
+{
+  "channels": {
+    "zulip": {
+      "multiBot": {
+        "allowBotIds": [12345, 67890],
+        "maxBotChainLength": 3,
+        "botCooldownMs": 60000
+      }
+    }
+  }
+}
+```
+
+### Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `multiBot.allowBotIds` | `(string\|number)[]` | `[]` | Bot user IDs allowed to trigger this bot. Use `"*"` to allow all bots. |
+| `multiBot.maxBotChainLength` | `number` | `3` | Max consecutive bot-to-bot replies per conversation before pausing. |
+| `multiBot.botCooldownMs` | `number` | `60000` | Cooldown (ms) after chain limit is reached before allowing again. |
+
+### How it works
+
+1. **Allowed bot list** — Messages from bots whose user IDs are in `allowBotIds` are processed instead of being silently dropped.
+2. **@mention override** — If any bot @mentions this bot, the message is processed regardless of `allowBotIds` (single response, no chain tracking).
+3. **Loop prevention** — A per-conversation chain counter tracks consecutive bot-to-bot exchanges. After `maxBotChainLength` bot replies, further bot messages are dropped until:
+   - A human sends a message in that conversation (resets the counter), or
+   - The `botCooldownMs` cooldown period elapses.
+4. **DM bypass** — Allowed bots bypass DM pairing/policy checks.
+
+### Example: Two bots discussing in a stream
+
+- Bot A sends a message in `#experiment > discussion`
+- Bot B (with `allowBotIds: [botA_id]`) receives and responds
+- Bot A (with `allowBotIds: [botB_id]`) receives and responds
+- After 3 exchanges (default), further bot messages are dropped for 60s
+
 ## Agent Tools
 
 | Tool | Description |
@@ -56,6 +99,7 @@ A custom [Zulip](https://zulip.com) channel plugin for [OpenClaw](https://github
 | `apiKey` | string | Bot API key |
 | `dmPolicy` | string | `"pairing"` \| `"open"` \| `"disabled"` |
 | `autoReplyStreams` | string[] | Streams where bot auto-replies without @mention |
+| `multiBot` | object | Multi-bot conversation settings (see above) |
 
 ## Architecture
 

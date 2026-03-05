@@ -11,7 +11,7 @@ import {
   logTypingFailure,
 } from "openclaw/plugin-sdk";
 import { getZulipRuntime } from "../runtime.js";
-import { resolveZulipAccount } from "./accounts.js";
+import { resolveZulipAccount, type MultiBotConfig } from "./accounts.js";
 import {
   createZulipClient,
   getZulipProfile,
@@ -104,6 +104,94 @@ function resolveStreamInfo(msg: ZulipMessage): {
   return { streamName, topic: msg.subject ?? "(no topic)" };
 }
 
+// ── Multi-bot conversation: chain tracking & cooldown ──
+
+/**
+ * Tracks consecutive bot-to-bot reply counts per conversation.
+ * Key: conversationId (e.g. "stream:general:topic" or "dm:123")
+ * Value: { count, lastBotReplyAt }
+ */
+const botChainTracker = new Map<string, { count: number; lastBotReplyAt: number }>();
+
+/** Stale chain entries are cleaned up after 10 minutes of inactivity */
+const BOT_CHAIN_TTL_MS = 10 * 60_000;
+
+function cleanupBotChains(): void {
+  const now = Date.now();
+  for (const [key, entry] of botChainTracker) {
+    if (now - entry.lastBotReplyAt > BOT_CHAIN_TTL_MS) {
+      botChainTracker.delete(key);
+    }
+  }
+}
+
+/**
+ * Check if a bot message should be processed based on chain limits and cooldown.
+ * Returns true if the message should be allowed, false if it should be dropped.
+ * Also increments the chain counter when allowed.
+ */
+function checkBotChain(
+  conversationId: string,
+  maxChainLength: number,
+  cooldownMs: number,
+): boolean {
+  cleanupBotChains();
+  const entry = botChainTracker.get(conversationId);
+  const now = Date.now();
+
+  if (!entry) {
+    // First bot message in this conversation
+    botChainTracker.set(conversationId, { count: 1, lastBotReplyAt: now });
+    return true;
+  }
+
+  // If cooldown has elapsed since the chain was blocked, reset the counter
+  if (entry.count >= maxChainLength && now - entry.lastBotReplyAt >= cooldownMs) {
+    botChainTracker.set(conversationId, { count: 1, lastBotReplyAt: now });
+    return true;
+  }
+
+  // If we've hit the chain limit and cooldown hasn't elapsed, block
+  if (entry.count >= maxChainLength) {
+    return false;
+  }
+
+  // Increment chain count
+  entry.count += 1;
+  entry.lastBotReplyAt = now;
+  return true;
+}
+
+/**
+ * Reset the bot chain counter for a conversation (called when a human message is seen).
+ */
+function resetBotChain(conversationId: string): void {
+  botChainTracker.delete(conversationId);
+}
+
+/**
+ * Build the conversation ID used for chain tracking.
+ */
+function buildConversationId(msg: ZulipMessage): string {
+  const streamInfo = resolveStreamInfo(msg);
+  if (streamInfo) {
+    return `stream:${streamInfo.streamName.toLowerCase()}:${streamInfo.topic.toLowerCase()}`;
+  }
+  return `dm:${msg.sender_id}`;
+}
+
+/**
+ * Check if a sender is in the allowed bot IDs list.
+ */
+function isBotAllowed(senderId: number, multiBot?: MultiBotConfig): boolean {
+  if (!multiBot?.allowBotIds || multiBot.allowBotIds.length === 0) return false;
+  const senderStr = String(senderId);
+  return multiBot.allowBotIds.some((id) => {
+    const normalized = String(id).trim();
+    return normalized === senderStr || normalized === "*";
+  });
+}
+
 export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise<void> {
   const core = getZulipRuntime();
   const cfg = opts.config ?? core.config.loadConfig();
@@ -128,6 +216,16 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
   const dmPolicy = account.config.dmPolicy ?? "pairing";
   const configAllowFrom = normalizeAllowList(account.config.allowFrom ?? []);
   const autoReplyStreams: string[] = account.autoReplyStreams ?? [];
+  const multiBot = account.multiBot;
+  const maxBotChainLength = multiBot?.maxBotChainLength ?? 3;
+  const botCooldownMs = multiBot?.botCooldownMs ?? 60_000;
+
+  if (multiBot?.allowBotIds && multiBot.allowBotIds.length > 0) {
+    logger.info?.(
+      `multi-bot conversation enabled: allowBotIds=${JSON.stringify(multiBot.allowBotIds)}, ` +
+      `maxChainLength=${maxBotChainLength}, cooldownMs=${botCooldownMs}`,
+    );
+  }
 
   const getEffectiveAllowFrom = async (): Promise<string[]> => {
     const storeAllowFrom = normalizeAllowList(
@@ -137,8 +235,35 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
   };
 
   const handleMessage = async (msg: ZulipMessage) => {
-    // Skip own messages
+    // Always skip own messages
     if (msg.sender_id === botUserId) return;
+
+    const conversationId = buildConversationId(msg);
+    const isFromAllowedBot = isBotAllowed(msg.sender_id, multiBot);
+    const rawText = msg.content?.trim() ?? "";
+    const mentioned = wasBotMentioned(rawText, botName);
+
+    // Determine if this message is from a bot we should respond to
+    const isBotMessage = isFromAllowedBot || (mentioned && isFromAllowedBot);
+
+    if (isFromAllowedBot) {
+      // Bot-to-bot: check chain limits to prevent infinite loops
+      if (!checkBotChain(conversationId, maxBotChainLength, botCooldownMs)) {
+        logger.info?.(
+          `bot chain limit reached for ${conversationId} ` +
+          `(max=${maxBotChainLength}, cooldown=${botCooldownMs}ms), ` +
+          `dropping message from bot ${msg.sender_id}`,
+        );
+        return;
+      }
+    } else if (mentioned) {
+      // @mention from a non-allowed-bot sender is handled by normal flow below
+      // If the sender happens to be a bot not in allowBotIds but @mentions us,
+      // we still respond (single response, no chain tracking needed)
+    } else {
+      // Regular human message — reset any bot chain counter for this conversation
+      resetBotChain(conversationId);
+    }
 
     const dedupeKey = `${account.accountId}:${msg.id}`;
     if (dedupeCheck(dedupeKey)) return;
@@ -149,7 +274,6 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
     const isDm = msg.type === "private";
     const streamInfo = resolveStreamInfo(msg);
     const chatType: ChatType = isDm ? "direct" : "channel";
-    const rawText = msg.content?.trim() ?? "";
 
     // Resolve allowFrom once for use in both stream and DM checks
     const effectiveAllowFrom = await getEffectiveAllowFrom();
@@ -159,51 +283,61 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
       const inAutoReplyStream = streamInfo && autoReplyStreams.some(
         (s) => s.toLowerCase() === streamInfo.streamName.toLowerCase()
       );
-      if (!inAutoReplyStream) {
-        const mentioned = wasBotMentioned(rawText, botName);
-        const mentionRegexes = core.channel.mentions.buildMentionRegexes(cfg);
-        const patternMatch = core.channel.mentions.matchesMentionPatterns(rawText, mentionRegexes);
-        if (!mentioned && !patternMatch) return;
+
+      if (isFromAllowedBot) {
+        // For allowed bots in streams: process if in auto-reply stream or if they @mentioned us
+        if (!inAutoReplyStream && !mentioned) return;
+      } else {
+        // For regular users: original logic
+        if (!inAutoReplyStream) {
+          const mentionRegexes = core.channel.mentions.buildMentionRegexes(cfg);
+          const patternMatch = core.channel.mentions.matchesMentionPatterns(rawText, mentionRegexes);
+          if (!mentioned && !patternMatch) return;
+        }
+        // For all stream messages (auto-reply or @mention), check allowFrom if configured
+        if (effectiveAllowFrom.length > 0 && !isSenderAllowed({
+          senderId,
+          senderEmail,
+          senderName,
+          allowFrom: effectiveAllowFrom,
+        })) return;
       }
-      // For all stream messages (auto-reply or @mention), check allowFrom if configured
-      if (effectiveAllowFrom.length > 0 && !isSenderAllowed({
-        senderId,
-        senderEmail,
-        senderName,
-        allowFrom: effectiveAllowFrom,
-      })) return;
     }
 
-    // DM policy
+    // DM policy — for allowed bots, skip DM policy checks
     if (isDm) {
-      if (dmPolicy === "disabled") return;
-      const senderAllowed = isSenderAllowed({
-        senderId,
-        senderEmail,
-        senderName,
-        allowFrom: effectiveAllowFrom,
-      });
-      if (dmPolicy !== "open" && !senderAllowed) {
-        if (dmPolicy === "pairing") {
-          const { code, created } = await core.channel.pairing.upsertPairingRequest({
-            channel: "zulip",
-            id: senderId,
-            meta: { name: senderName, email: senderEmail },
-          });
-          if (created) {
-            try {
-              await sendZulipMessage(`dm:${senderId}`, core.channel.pairing.buildPairingReply({
-                channel: "zulip",
-                idLine: `Your Zulip user id: ${senderId}`,
-                code,
-              }), { accountId: account.accountId });
-              opts.statusSink?.({ lastOutboundAt: Date.now() });
-            } catch (err) {
-              logger.warn?.(`failed to send pairing reply to ${senderId}: ${err}`);
+      if (isFromAllowedBot) {
+        // Allowed bots bypass DM policy entirely
+      } else {
+        if (dmPolicy === "disabled") return;
+        const senderAllowed = isSenderAllowed({
+          senderId,
+          senderEmail,
+          senderName,
+          allowFrom: effectiveAllowFrom,
+        });
+        if (dmPolicy !== "open" && !senderAllowed) {
+          if (dmPolicy === "pairing") {
+            const { code, created } = await core.channel.pairing.upsertPairingRequest({
+              channel: "zulip",
+              id: senderId,
+              meta: { name: senderName, email: senderEmail },
+            });
+            if (created) {
+              try {
+                await sendZulipMessage(`dm:${senderId}`, core.channel.pairing.buildPairingReply({
+                  channel: "zulip",
+                  idLine: `Your Zulip user id: ${senderId}`,
+                  code,
+                }), { accountId: account.accountId });
+                opts.statusSink?.({ lastOutboundAt: Date.now() });
+              } catch (err) {
+                logger.warn?.(`failed to send pairing reply to ${senderId}: ${err}`);
+              }
             }
           }
+          return;
         }
-        return;
       }
     }
 
