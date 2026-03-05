@@ -83,6 +83,9 @@ Multiple OpenClaw bot instances can converse with each other in the same stream/
 
 ## Agent Tools
 
+All agent tools accept an optional `accountId` parameter to target a specific Zulip account in multi-account setups.
+
+
 | Tool | Description |
 |------|-------------|
 | `zulip_streams` | List, create, join, leave, update, delete streams; list topics and members |
