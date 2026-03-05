@@ -566,3 +566,104 @@ export async function removeZulipReaction(
     body: body.toString(),
   });
 }
+
+// ── Scheduled Messages ──
+
+export type ZulipScheduledMessage = {
+  scheduled_message_id: number;
+  type: "stream" | "private";
+  to: number | number[];
+  topic?: string;
+  content: string;
+  rendered_content: string;
+  scheduled_delivery_timestamp: number;
+  failed: boolean;
+};
+
+export async function listZulipScheduledMessages(
+  client: ZulipClient,
+): Promise<ZulipScheduledMessage[]> {
+  const data = await client.request<{
+    scheduled_messages: ZulipScheduledMessage[];
+  }>("/scheduled_messages");
+  return data.scheduled_messages ?? [];
+}
+
+export async function createZulipScheduledMessage(
+  client: ZulipClient,
+  params: {
+    type: "stream" | "direct";
+    to: number | number[];
+    content: string;
+    scheduledDeliveryTimestamp: number;
+    topic?: string;
+  },
+): Promise<{ scheduled_message_id: number }> {
+  const body = new URLSearchParams();
+  body.set("type", params.type);
+  body.set(
+    "to",
+    typeof params.to === "number"
+      ? String(params.to)
+      : JSON.stringify(params.to),
+  );
+  body.set("content", params.content);
+  body.set(
+    "scheduled_delivery_timestamp",
+    String(params.scheduledDeliveryTimestamp),
+  );
+  if (params.topic) body.set("topic", params.topic);
+  const data = await client.request<{
+    scheduled_message_id: number;
+    result: string;
+  }>("/scheduled_messages", {
+    method: "POST",
+    body: body.toString(),
+  });
+  return { scheduled_message_id: data.scheduled_message_id };
+}
+
+export async function updateZulipScheduledMessage(
+  client: ZulipClient,
+  scheduledMessageId: number,
+  params: {
+    type?: "stream" | "direct";
+    to?: number | number[];
+    content?: string;
+    topic?: string;
+    scheduledDeliveryTimestamp?: number;
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  if (params.type !== undefined) body.set("type", params.type);
+  if (params.to !== undefined) {
+    body.set(
+      "to",
+      typeof params.to === "number"
+        ? String(params.to)
+        : JSON.stringify(params.to),
+    );
+  }
+  if (params.content !== undefined) body.set("content", params.content);
+  if (params.topic !== undefined) body.set("topic", params.topic);
+  if (params.scheduledDeliveryTimestamp !== undefined) {
+    body.set(
+      "scheduled_delivery_timestamp",
+      String(params.scheduledDeliveryTimestamp),
+    );
+  }
+  await client.request<{ result: string }>(
+    `/scheduled_messages/${scheduledMessageId}`,
+    { method: "PATCH", body: body.toString() },
+  );
+}
+
+export async function deleteZulipScheduledMessage(
+  client: ZulipClient,
+  scheduledMessageId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/scheduled_messages/${scheduledMessageId}`,
+    { method: "DELETE" },
+  );
+}

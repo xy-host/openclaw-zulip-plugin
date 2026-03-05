@@ -89,6 +89,7 @@ Multiple OpenClaw bot instances can converse with each other in the same stream/
 | `zulip_send` | Send messages to streams (with topic) or DMs |
 | `zulip_users` | List users, look up by ID or email, check presence status |
 | `zulip_messages` | Search/fetch messages, edit/delete bot messages, add/remove emoji reactions |
+| `zulip_scheduled_messages` | Create, list, edit, or delete scheduled messages for future delivery |
 
 ## Configuration
 
