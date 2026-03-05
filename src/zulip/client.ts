@@ -989,3 +989,45 @@ export async function reorderZulipLinkifiers(
     { method: "PATCH", body: body.toString() },
   );
 }
+
+// ── User Status ──
+
+export type ZulipUserStatus = {
+  status_text?: string;
+  emoji_name?: string;
+  emoji_code?: string;
+  reaction_type?: string;
+  away?: boolean;
+};
+
+export async function getZulipUserStatus(
+  client: ZulipClient,
+  userId: number,
+): Promise<ZulipUserStatus> {
+  const data = await client.request<{ status: ZulipUserStatus; result: string }>(
+    `/users/${userId}/status`,
+  );
+  return data.status ?? {};
+}
+
+export async function updateZulipOwnStatus(
+  client: ZulipClient,
+  params: {
+    statusText?: string;
+    emojiName?: string;
+    emojiCode?: string;
+    reactionType?: string;
+    away?: boolean;
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  if (params.statusText !== undefined) body.set("status_text", params.statusText);
+  if (params.emojiName !== undefined) body.set("emoji_name", params.emojiName);
+  if (params.emojiCode !== undefined) body.set("emoji_code", params.emojiCode);
+  if (params.reactionType !== undefined) body.set("reaction_type", params.reactionType);
+  if (params.away !== undefined) body.set("away", String(params.away));
+  await client.request<{ result: string }>("/users/me/status", {
+    method: "POST",
+    body: body.toString(),
+  });
+}
