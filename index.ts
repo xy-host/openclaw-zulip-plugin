@@ -695,8 +695,12 @@ const plugin = {
             }
             await updateZulipMessage(client, params.messageId, {
               content: params.content,
-              topic: params.newTopic,
-              propagateMode: params.propagateMode ?? "change_one",
+              ...(params.newTopic
+                ? {
+                    topic: params.newTopic,
+                    propagateMode: params.propagateMode ?? "change_one",
+                  }
+                : {}),
             });
             return {
               content: [
