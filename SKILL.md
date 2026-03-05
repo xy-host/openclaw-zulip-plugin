@@ -79,6 +79,29 @@ Search, fetch, edit, delete messages and manage emoji reactions. Actions:
 - `emojiName` should be without colons, e.g. `thumbs_up`, `check`, `eyes`, `tada`
 - Use `get` to fetch full message details including content, sender info, and reactions
 
+### `zulip_scheduled_messages`
+Create, list, edit, or delete scheduled messages. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `list` | — | List all pending scheduled messages |
+| `create` | `content`, `scheduledAt`, + `streamName` or `userId` | Schedule a message for future delivery |
+| `edit` | `scheduledMessageId` (+ `content`/`scheduledAt`/`topic`) | Update a pending scheduled message |
+| `delete` | `scheduledMessageId` | Cancel/delete a scheduled message |
+
+**Create parameters**:
+- `streamName` — target stream name (mutually exclusive with `userId`)
+- `topic` — topic within the stream (for stream messages; if omitted, defaults to "(no topic)" — always provide a topic)
+- `userId` — target user ID for DM (mutually exclusive with `streamName`)
+- `content` — message content in Zulip markdown
+- `scheduledAt` — ISO 8601 datetime string for delivery, e.g. `2025-12-31T09:00:00Z` (must be in the future)
+
+**Tips**:
+- Use `list` to see all pending scheduled messages with their IDs
+- The `scheduledMessageId` is different from a regular message ID
+- Failed scheduled messages (shown with ❌) can be rescheduled by editing with a new `scheduledAt`
+- Use `delete` to cancel a scheduled message before it is sent
+
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:

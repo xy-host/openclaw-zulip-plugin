@@ -23,6 +23,10 @@ import {
   deleteZulipMessage,
   addZulipReaction,
   removeZulipReaction,
+  listZulipScheduledMessages,
+  createZulipScheduledMessage,
+  updateZulipScheduledMessage,
+  deleteZulipScheduledMessage,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -803,6 +807,344 @@ const plugin = {
             return {
               content: [
                 { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_scheduled_messages",
+      description:
+        "Create, list, edit, or delete scheduled messages in Zulip. " +
+        "Use to schedule messages for future delivery to streams or DMs, " +
+        "view pending scheduled messages, reschedule them, or cancel them.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: ["list", "create", "edit", "delete"],
+            description: "Action to perform",
+          },
+          scheduledMessageId: {
+            type: "number",
+            description:
+              "Scheduled message ID (for edit/delete). This is different from a regular message ID.",
+          },
+          streamName: {
+            type: "string",
+            description:
+              "Stream name to send to (for create). Mutually exclusive with userId.",
+          },
+          topic: {
+            type: "string",
+            description:
+              "Topic within the stream (for create/edit when targeting a stream). If omitted for a stream target, the topic defaults to \"(no topic)\".",
+          },
+          userId: {
+            type: "string",
+            description:
+              "User ID for direct message (for create). Mutually exclusive with streamName.",
+          },
+          content: {
+            type: "string",
+            description: "Message content in Zulip markdown (for create/edit).",
+          },
+          scheduledAt: {
+            type: "string",
+            description:
+              "ISO 8601 datetime string for when the message should be sent (for create/edit), " +
+              "e.g. '2025-12-31T09:00:00Z'. Must be in the future.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg);
+
+        switch (params.action) {
+          case "list": {
+            const scheduled = await listZulipScheduledMessages(client);
+            if (scheduled.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "No scheduled messages found." },
+                ],
+              };
+            }
+            const lines = scheduled.map((sm) => {
+              const deliverAt = new Date(
+                sm.scheduled_delivery_timestamp * 1000,
+              ).toISOString();
+              const target =
+                sm.type === "stream"
+                  ? `stream (id:${sm.to})${sm.topic ? ` > ${sm.topic}` : ""}`
+                  : `DM to ${JSON.stringify(sm.to)}`;
+              const preview =
+                sm.content.length > 200
+                  ? sm.content.slice(0, 200) + "…"
+                  : sm.content;
+              const status = sm.failed ? " ❌ FAILED" : "";
+              return `- **[${sm.scheduled_message_id}]** → ${target} at ${deliverAt}${status}\n  ${preview}`;
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${scheduled.length} scheduled message(s):\n\n${lines.join("\n\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "create": {
+            if (!params.content) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: content is required for create.",
+                  },
+                ],
+              };
+            }
+            if (!params.scheduledAt) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: scheduledAt is required for create (ISO 8601 datetime).",
+                  },
+                ],
+              };
+            }
+            const deliverTimestamp = Math.floor(
+              new Date(params.scheduledAt).getTime() / 1000,
+            );
+            if (isNaN(deliverTimestamp) || deliverTimestamp <= 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: scheduledAt is not a valid datetime.",
+                  },
+                ],
+              };
+            }
+            if (deliverTimestamp <= Math.floor(Date.now() / 1000)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: scheduledAt must be in the future.",
+                  },
+                ],
+              };
+            }
+
+            if (params.streamName && params.userId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide only one of streamName or userId for create.",
+                  },
+                ],
+              };
+            }
+
+            if (params.streamName) {
+              // Resolve stream name to ID; try subscriptions first (includes private streams),
+              // then fall back to all public streams
+              const stream =
+                (await listZulipSubscriptions(client)).find(
+                  (s) =>
+                    s.name.toLowerCase() ===
+                    params.streamName.toLowerCase(),
+                ) ??
+                (await listZulipStreams(client)).find(
+                  (s) =>
+                    s.name.toLowerCase() ===
+                    params.streamName.toLowerCase(),
+                );
+
+              if (!stream) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: stream "${params.streamName}" not found.`,
+                    },
+                  ],
+                };
+              }
+              const result = await createZulipScheduledMessage(client, {
+                type: "stream",
+                to: stream.stream_id,
+                content: params.content,
+                scheduledDeliveryTimestamp: deliverTimestamp,
+                topic: params.topic ?? "(no topic)",
+              });
+              const deliverAt = new Date(
+                deliverTimestamp * 1000,
+              ).toISOString();
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      `Scheduled message (id:${result.scheduled_message_id}) ` +
+                      `to #${params.streamName} > ${params.topic ?? "(no topic)"} ` +
+                      `at ${deliverAt} ✅`,
+                  },
+                ],
+              };
+            } else if (params.userId) {
+              const userId = Number(params.userId);
+              if (!Number.isFinite(userId) || userId <= 0) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: "Error: userId must be a valid positive numeric user ID.",
+                    },
+                  ],
+                };
+              }
+              const result = await createZulipScheduledMessage(client, {
+                type: "direct",
+                to: [userId],
+                content: params.content,
+                scheduledDeliveryTimestamp: deliverTimestamp,
+              });
+              const deliverAt = new Date(
+                deliverTimestamp * 1000,
+              ).toISOString();
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      `Scheduled DM (id:${result.scheduled_message_id}) ` +
+                      `to user ${params.userId} at ${deliverAt} ✅`,
+                  },
+                ],
+              };
+            } else {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide either streamName or userId for create.",
+                  },
+                ],
+              };
+            }
+          }
+
+          case "edit": {
+            if (!params.scheduledMessageId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: scheduledMessageId is required for edit.",
+                  },
+                ],
+              };
+            }
+            if (!params.content && !params.scheduledAt && !params.topic) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide content, scheduledAt, and/or topic to edit.",
+                  },
+                ],
+              };
+            }
+            const updateParams: {
+              content?: string;
+              topic?: string;
+              scheduledDeliveryTimestamp?: number;
+            } = {};
+            if (params.content) updateParams.content = params.content;
+            if (params.topic) updateParams.topic = params.topic;
+            if (params.scheduledAt) {
+              const ts = Math.floor(
+                new Date(params.scheduledAt).getTime() / 1000,
+              );
+              if (isNaN(ts) || ts <= 0) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: "Error: scheduledAt is not a valid datetime.",
+                    },
+                  ],
+                };
+              }
+              if (ts <= Math.floor(Date.now() / 1000)) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: "Error: scheduledAt must be in the future.",
+                    },
+                  ],
+                };
+              }
+              updateParams.scheduledDeliveryTimestamp = ts;
+            }
+            await updateZulipScheduledMessage(
+              client,
+              params.scheduledMessageId,
+              updateParams,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Scheduled message ${params.scheduledMessageId} updated ✅`,
+                },
+              ],
+            };
+          }
+
+          case "delete": {
+            if (!params.scheduledMessageId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: scheduledMessageId is required for delete.",
+                  },
+                ],
+              };
+            }
+            await deleteZulipScheduledMessage(
+              client,
+              params.scheduledMessageId,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Scheduled message ${params.scheduledMessageId} deleted ✅`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Unknown action: ${params.action}`,
+                },
               ],
             };
         }
