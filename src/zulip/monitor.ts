@@ -37,16 +37,24 @@ const RECENT_MESSAGE_TTL_MS = 5 * 60_000;
 const RECENT_MAX = 2000;
 const recentIds = new Map<string, number>();
 
-function dedupeCheck(key: string): boolean {
+function dedupeCleanup(): void {
   const now = Date.now();
-  // Cleanup old entries
-  if (recentIds.size > RECENT_MAX) {
-    for (const [k, t] of recentIds) {
-      if (now - t > RECENT_MESSAGE_TTL_MS) recentIds.delete(k);
-    }
+  for (const [k, t] of recentIds) {
+    if (now - t > RECENT_MESSAGE_TTL_MS) recentIds.delete(k);
   }
+}
+
+function dedupeCheck(key: string): boolean {
+  // Always clean up expired entries first
+  dedupeCleanup();
   if (recentIds.has(key)) return true;
-  recentIds.set(key, now);
+  // Enforce hard cap after cleanup
+  if (recentIds.size >= RECENT_MAX) {
+    // Evict oldest entry
+    const oldest = recentIds.keys().next().value;
+    if (oldest !== undefined) recentIds.delete(oldest);
+  }
+  recentIds.set(key, Date.now());
   return false;
 }
 
@@ -154,16 +162,14 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
         const patternMatch = core.channel.mentions.matchesMentionPatterns(rawText, mentionRegexes);
         if (!mentioned && !patternMatch) return;
       }
-      // For auto-reply streams, only respond to allowed senders
-      if (inAutoReplyStream) {
-        const streamAllowFrom = await getEffectiveAllowFrom();
-        if (streamAllowFrom.length > 0 && !isSenderAllowed({
-          senderId,
-          senderEmail,
-          senderName,
-          allowFrom: streamAllowFrom,
-        })) return;
-      }
+      // For all stream messages (auto-reply or @mention), check allowFrom if configured
+      const streamAllowFrom = await getEffectiveAllowFrom();
+      if (streamAllowFrom.length > 0 && !isSenderAllowed({
+        senderId,
+        senderEmail,
+        senderName,
+        allowFrom: streamAllowFrom,
+      })) return;
     }
 
     // DM policy
@@ -191,7 +197,9 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
                 code,
               }), { accountId: account.accountId });
               opts.statusSink?.({ lastOutboundAt: Date.now() });
-            } catch {}
+            } catch (err) {
+              logger.warn?.(`failed to send pairing reply to ${senderId}: ${err}`);
+            }
           }
         }
         return;
@@ -327,7 +335,9 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
               topic: streamInfo.topic,
             });
           }
-        } catch {}
+        } catch (err) {
+          logger.debug?.(`typing indicator start failed for ${to}: ${err}`);
+        }
       },
       onStartError: (err) => {
         logTypingFailure({

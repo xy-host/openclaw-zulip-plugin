@@ -56,6 +56,29 @@ async function readZulipError(res: Response): Promise<string> {
   return await res.text();
 }
 
+/**
+ * Combine multiple AbortSignals into one. Uses native AbortSignal.any()
+ * when available (Node.js >= 20), falls back to manual listener wiring.
+ */
+function combineAbortSignals(...signals: AbortSignal[]): AbortSignal {
+  const valid = signals.filter(Boolean);
+  if (valid.length === 0) return new AbortController().signal;
+  if (valid.length === 1) return valid[0];
+  if (typeof AbortSignal.any === "function") {
+    return AbortSignal.any(valid);
+  }
+  // Polyfill for Node.js < 20
+  const controller = new AbortController();
+  for (const signal of valid) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      return controller.signal;
+    }
+    signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
+  }
+  return controller.signal;
+}
+
 export function createZulipClient(params: {
   serverUrl: string;
   botEmail: string;
@@ -128,7 +151,7 @@ export async function pollZulipEvents(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 90_000);
   const combinedSignal = signal
-    ? AbortSignal.any([signal, controller.signal])
+    ? combineAbortSignals(signal, controller.signal)
     : controller.signal;
   try {
     const res = await fetch(url, { headers, signal: combinedSignal });
