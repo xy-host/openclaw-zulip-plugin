@@ -1,6 +1,6 @@
 ---
 name: zulip
-description: "Interact with Zulip messaging. Use when: sending messages to Zulip streams/DMs, managing streams, or responding in Zulip channels. Covers formatting, topic conventions, and tool usage."
+description: "Interact with Zulip messaging. Use when: sending messages to Zulip streams/DMs, managing streams, looking up users, or responding in Zulip channels. Covers formatting, topic conventions, and tool usage."
 metadata: { "openclaw": { "emoji": "💬" } }
 ---
 
@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Two tools are available:
+Three tools are available:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -36,6 +36,22 @@ Manage streams. Actions:
 
 **Note**: `create` and `join` use the same action — subscribing to a non-existent stream creates it.
 
+### `zulip_users`
+Look up and manage users. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `list` | — | List all users (use `includeBots`/`includeDeactivated` to filter) |
+| `get` | `userId` | Get a single user's details by ID |
+| `get_by_email` | `email` | Get a single user's details by email |
+| `presence` | `userId` | Check a user's online/idle/offline status |
+
+**Tips**:
+- Use `list` to find user IDs when you need to send a DM
+- Use `get_by_email` when you know someone's email but not their Zulip ID
+- The `presence` action shows per-client status (web, desktop, mobile) with last-seen timestamps
+- By default, `list` excludes bots and deactivated users — set `includeBots: true` or `includeDeactivated: true` to include them
+
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:
@@ -48,11 +64,11 @@ Zulip uses its own markdown variant. Key differences from other platforms:
 - Bulleted and numbered lists
 - Block quotes (`> text` or nested `>> text`)
 - Spoiler/collapsible blocks:
-  ```
+  ````
   ```spoiler Header text
   Hidden content here
-  ```​
   ```
+  ````
 - User mentions: `@**Username**`
 - Stream links: `#**stream-name**` or `#**stream-name>topic**`
 - Linkified URLs (automatic)
@@ -88,7 +104,7 @@ When the agent receives a message from a Zulip stream:
 ## Direct Messages
 
 - Use `zulip_send` with `userId` (numeric Zulip user ID, as a string)
-- You need the user's Zulip ID — use `zulip_streams` → `members` to find IDs if needed
+- You need the user's Zulip ID — use `zulip_users` → `list` or `get_by_email` to find IDs
 
 ## Common Pitfalls
 
@@ -104,3 +120,4 @@ When the agent receives a message from a Zulip stream:
    - ❌ `streamName="#**engineering**"` (includes Zulip markdown formatting)
    - ✅ `streamName="engineering"`, `topic="weekly-sync"`
 8. **Don't parse Zulip markdown refs as names**: Stream links like `#**general>announcements**` are display formatting. Extract the plain name and topic separately
+9. **Finding user IDs for DMs**: Use `zulip_users` with `list` or `get_by_email` to find user IDs — don't guess or hardcode them

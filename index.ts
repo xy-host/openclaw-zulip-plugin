@@ -13,6 +13,10 @@ import {
   deleteZulipStream,
   getZulipStreamMembers,
   sendZulipApiMessage,
+  listZulipUsers,
+  getZulipUser,
+  getZulipUserByEmail,
+  getZulipUserPresence,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -23,6 +27,28 @@ function getClient(cfg: any, accountId?: string) {
     botEmail: account.botEmail,
     apiKey: account.apiKey,
   });
+}
+
+function formatUserDetails(user: {
+  full_name: string;
+  user_id: number;
+  email: string;
+  is_active: boolean;
+  is_bot: boolean;
+  timezone?: string;
+  date_joined?: string;
+}): string {
+  return [
+    `**${user.full_name}**`,
+    `- ID: ${user.user_id}`,
+    `- Email: ${user.email}`,
+    `- Active: ${user.is_active ? "Yes" : "No"}`,
+    `- Bot: ${user.is_bot ? "Yes" : "No"}`,
+    user.timezone ? `- Timezone: ${user.timezone}` : null,
+    user.date_joined ? `- Joined: ${user.date_joined}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 const plugin = {
@@ -315,6 +341,167 @@ const plugin = {
               },
             ],
           };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_users",
+      description:
+        "List, look up, or check presence of Zulip users. " +
+        "Use to find user IDs for DMs, look up user details, or check who is online.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: ["list", "get", "get_by_email", "presence"],
+            description: "Action to perform",
+          },
+          userId: {
+            type: "number",
+            description: "User ID (for get/presence)",
+          },
+          email: {
+            type: "string",
+            description: "User email address (for get_by_email)",
+          },
+          includeDeactivated: {
+            type: "boolean",
+            description:
+              "Include deactivated users in list results (default: false)",
+          },
+          includeBots: {
+            type: "boolean",
+            description: "Include bot users in list results (default: false)",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg);
+
+        switch (params.action) {
+          case "list": {
+            const users = await listZulipUsers(client);
+            const includeDeactivated = params.includeDeactivated === true;
+            const includeBots = params.includeBots === true;
+            const filtered = users.filter((u) => {
+              if (!includeDeactivated && !u.is_active) return false;
+              if (!includeBots && u.is_bot) return false;
+              return true;
+            });
+            const lines = filtered.map(
+              (u) =>
+                `- **${u.full_name}** (id:${u.user_id}, email:${u.email})${u.is_bot ? " 🤖" : ""}${!u.is_active ? " ⛔" : ""}`,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    lines.length > 0
+                      ? `${lines.length} users found:\n${lines.join("\n")}`
+                      : "No users found.",
+                },
+              ],
+            };
+          }
+
+          case "get": {
+            if (!params.userId) {
+              return {
+                content: [
+                  { type: "text", text: "Error: userId is required for get." },
+                ],
+              };
+            }
+            const user = await getZulipUser(client, params.userId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: formatUserDetails(user),
+                },
+              ],
+            };
+          }
+
+          case "get_by_email": {
+            if (!params.email) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: email is required for get_by_email.",
+                  },
+                ],
+              };
+            }
+            const user = await getZulipUserByEmail(client, params.email);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: formatUserDetails(user),
+                },
+              ],
+            };
+          }
+
+          case "presence": {
+            if (!params.userId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: userId is required for presence.",
+                  },
+                ],
+              };
+            }
+            const { presence } = await getZulipUserPresence(
+              client,
+              params.userId,
+            );
+            const entries = Object.entries(presence);
+            if (entries.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `No presence data for user ${params.userId}.`,
+                  },
+                ],
+              };
+            }
+            const lines = entries.map(([clientName, info]) => {
+              const ts = new Date(info.timestamp * 1000).toISOString();
+              const emoji =
+                info.status === "active"
+                  ? "🟢"
+                  : info.status === "idle"
+                    ? "🟡"
+                    : "⚫";
+              return `- ${emoji} **${clientName}**: ${info.status} (last seen: ${ts})`;
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Presence for user ${params.userId}:\n${lines.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
         }
       },
     });
