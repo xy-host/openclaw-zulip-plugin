@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Seven tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
+Eight tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -134,6 +134,28 @@ List, upload, or deactivate custom emoji in the Zulip organization. Actions:
 - Recommended image size: under 256KB, ideally square
 - Deactivated emoji are soft-deleted — they can still appear in old messages but cannot be used in new ones
 - Use `list` with `includeDeactivated: true` to see all emoji including deactivated ones
+
+### `zulip_drafts`
+List, create, edit, or delete message drafts. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `list` | — | List all drafts with their IDs, targets, and content previews |
+| `create` | `content` + `streamName` or `userId` | Create a new draft for a stream or DM |
+| `edit` | `draftId`, `content` (+ optional `streamName`/`userId`/`topic`) | Update draft content and/or target |
+| `delete` | `draftId` | Delete a draft |
+
+**Create/Edit parameters**:
+- `streamName` — target stream name (mutually exclusive with `userId`)
+- `topic` — topic within the stream (if omitted for stream drafts, defaults to "(no topic)")
+- `userId` — target user ID for DM draft (mutually exclusive with `streamName`)
+- `content` — draft message content in Zulip markdown
+
+**Tips**:
+- Use `list` to see all drafts with their IDs — you need `draftId` for edit/delete
+- Drafts appear in the user's compose box in Zulip
+- When editing, only `content` is required — the target (stream/DM) is preserved from the original draft unless you override it with `streamName` or `userId`
+- Use drafts to prepare messages that need review before sending
 
 ## Formatting (Zulip Markdown)
 
