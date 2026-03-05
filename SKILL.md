@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Nine tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
+Ten tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -182,6 +182,31 @@ Manage topics within streams: resolve, unresolve, rename, move, or delete. Actio
 - `move` can move a topic to another stream, rename it, or both
 - `delete` permanently removes all messages in the topic — use with caution, typically admin-only
 - The `propagateMode` parameter defaults to `change_all` which applies the change to all messages in the topic
+
+### `zulip_linkifiers`
+List, add, update, remove, or reorder linkifiers (auto-linking patterns) in the Zulip organization. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `list` | — | List all configured linkifiers with their IDs, patterns, and URL templates |
+| `add` | `pattern`, `urlTemplate` | Add a new linkifier |
+| `update` | `filterId`, `pattern`, `urlTemplate` | Update an existing linkifier's pattern and URL template |
+| `remove` | `filterId` | Remove a linkifier |
+| `reorder` | `orderedIds` | Reorder linkifiers by providing all IDs in the desired order |
+
+**Parameters**:
+- `pattern` — Regular expression using re2 syntax. Use named groups like `(?P<id>[0-9]+)` to capture values
+- `urlTemplate` — URL template using RFC 6570 syntax, referencing named groups from the pattern, e.g. `https://github.com/org/repo/issues/{id}`
+- `filterId` — Linkifier ID (use `list` to find IDs)
+- `orderedIds` — Array of all linkifier IDs in desired order (must include every existing ID exactly once)
+
+**Tips**:
+- Linkifiers automatically convert matching text in messages and topics into clickable links
+- Common use cases: linking issue numbers (`#123`), ticket IDs (`JIRA-456`), commit hashes, etc.
+- Patterns use re2 regex syntax (not PCRE) — some advanced features like backreferences are not available
+- The order of linkifiers matters when patterns overlap — use `reorder` to prioritize
+- Use `list` to find `filterId` values before updating or removing
+
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:

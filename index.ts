@@ -41,6 +41,11 @@ import {
   editZulipDraft,
   deleteZulipDraft,
   deleteZulipTopic,
+  listZulipLinkifiers,
+  addZulipLinkifier,
+  updateZulipLinkifier,
+  removeZulipLinkifier,
+  reorderZulipLinkifiers,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -2309,6 +2314,203 @@ const plugin = {
       },
     });
 
+
+    api.registerTool({
+      name: "zulip_linkifiers",
+      description:
+        "List, add, update, remove, or reorder linkifiers (auto-linking patterns) in the Zulip organization. " +
+        "Linkifiers automatically convert text patterns in messages and topics into clickable links. " +
+        "For example, a pattern like '#(?P<id>[0-9]+)' with a URL template " +
+        "'https://github.com/org/repo/issues/{id}' will auto-link '#123' to the corresponding GitHub issue.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["list", "add", "update", "remove", "reorder"],
+            description: "Action to perform",
+          },
+          filterId: {
+            type: "number",
+            description:
+              "Linkifier ID (for update/remove). Use 'list' to find IDs.",
+          },
+          pattern: {
+            type: "string",
+            description:
+              "Regular expression pattern using re2 syntax (for add/update). " +
+              "Use named groups like (?P<id>[0-9]+) to capture values for the URL template.",
+          },
+          urlTemplate: {
+            type: "string",
+            description:
+              "URL template using RFC 6570 syntax (for add/update). " +
+              "Reference named groups from the pattern, e.g. 'https://github.com/org/repo/issues/{id}'.",
+          },
+          orderedIds: {
+            type: "array",
+            items: { type: "number" },
+            description:
+              "Array of all linkifier IDs in the desired order (for reorder). " +
+              "Must include every existing linkifier ID exactly once.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "list": {
+            const linkifiers = await listZulipLinkifiers(client);
+            if (linkifiers.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "No linkifiers configured." },
+                ],
+              };
+            }
+            const lines = linkifiers.map(
+              (lf, idx) =>
+                `${idx + 1}. **[${lf.id}]** \`${lf.pattern}\` → ${lf.url_template}`,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${linkifiers.length} linkifier(s):\n\n${lines.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "add": {
+            if (!params.pattern) {
+              return {
+                content: [
+                  { type: "text", text: "Error: pattern is required for add." },
+                ],
+              };
+            }
+            if (!params.urlTemplate) {
+              return {
+                content: [
+                  { type: "text", text: "Error: urlTemplate is required for add." },
+                ],
+              };
+            }
+            const result = await addZulipLinkifier(client, {
+              pattern: params.pattern,
+              urlTemplate: params.urlTemplate,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Linkifier added [${result.id}] ✅\n` +
+                    `Pattern: \`${params.pattern}\`\n` +
+                    `URL template: ${params.urlTemplate}`,
+                },
+              ],
+            };
+          }
+
+          case "update": {
+            if (params.filterId == null || typeof params.filterId !== "number") {
+              return {
+                content: [
+                  { type: "text", text: "Error: filterId is required for update." },
+                ],
+              };
+            }
+            if (!params.pattern) {
+              return {
+                content: [
+                  { type: "text", text: "Error: pattern is required for update." },
+                ],
+              };
+            }
+            if (!params.urlTemplate) {
+              return {
+                content: [
+                  { type: "text", text: "Error: urlTemplate is required for update." },
+                ],
+              };
+            }
+            await updateZulipLinkifier(client, params.filterId, {
+              pattern: params.pattern,
+              urlTemplate: params.urlTemplate,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Linkifier [${params.filterId}] updated ✅\n` +
+                    `Pattern: \`${params.pattern}\`\n` +
+                    `URL template: ${params.urlTemplate}`,
+                },
+              ],
+            };
+          }
+
+          case "remove": {
+            if (params.filterId == null || typeof params.filterId !== "number") {
+              return {
+                content: [
+                  { type: "text", text: "Error: filterId is required for remove." },
+                ],
+              };
+            }
+            await removeZulipLinkifier(client, params.filterId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Linkifier [${params.filterId}] removed ✅`,
+                },
+              ],
+            };
+          }
+
+          case "reorder": {
+            if (!params.orderedIds || !Array.isArray(params.orderedIds) || params.orderedIds.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: orderedIds array is required for reorder. Must include all linkifier IDs.",
+                  },
+                ],
+              };
+            }
+            await reorderZulipLinkifiers(client, params.orderedIds);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Linkifiers reordered ✅ (new order: ${params.orderedIds.join(", ")})`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
   },
 };
 
