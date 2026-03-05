@@ -17,6 +17,12 @@ import {
   getZulipUser,
   getZulipUserByEmail,
   getZulipUserPresence,
+  getZulipMessages,
+  getZulipSingleMessage,
+  updateZulipMessage,
+  deleteZulipMessage,
+  addZulipReaction,
+  removeZulipReaction,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -49,6 +55,28 @@ function formatUserDetails(user: {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function formatMessageDetails(msg: {
+  id: number;
+  sender_full_name: string;
+  sender_id: number;
+  type: string;
+  display_recipient: string | Array<{ id: number; email: string; full_name: string }>;
+  subject: string;
+  content: string;
+  timestamp: number;
+}): string {
+  const date = new Date(msg.timestamp * 1000).toISOString();
+  const location =
+    msg.type === "stream"
+      ? `#${typeof msg.display_recipient === "string" ? msg.display_recipient : "?"} > ${msg.subject}`
+      : "DM";
+  const preview =
+    msg.content.length > 300
+      ? msg.content.slice(0, 300) + "…"
+      : msg.content;
+  return `**[${msg.id}]** ${msg.sender_full_name} (${date}) in ${location}:\n${preview}`;
 }
 
 const plugin = {
@@ -491,6 +519,277 @@ const plugin = {
                 {
                   type: "text",
                   text: `Presence for user ${params.userId}:\n${lines.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_messages",
+      description:
+        "Search, fetch, edit, delete Zulip messages, and manage reactions. " +
+        "Use to retrieve message history from streams/topics/DMs, look up a specific message, " +
+        "edit or delete messages the bot has sent, or add/remove emoji reactions.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: {
+            type: "string",
+            enum: [
+              "get",
+              "search",
+              "edit",
+              "delete",
+              "add_reaction",
+              "remove_reaction",
+            ],
+            description: "Action to perform",
+          },
+          messageId: {
+            type: "number",
+            description: "Message ID (for get/edit/delete/add_reaction/remove_reaction)",
+          },
+          query: {
+            type: "string",
+            description:
+              "Search query string for Zulip search (for search action). " +
+              "Supports Zulip search operators like 'stream:', 'topic:', 'sender:', 'has:', 'is:', etc.",
+          },
+          streamName: {
+            type: "string",
+            description:
+              "Filter messages by stream name (for search). Adds a 'stream' narrow.",
+          },
+          topic: {
+            type: "string",
+            description:
+              "Filter messages by topic (for search). Adds a 'topic' narrow.",
+          },
+          senderId: {
+            type: "number",
+            description:
+              "Filter messages by sender user ID (for search). Adds a 'sender' narrow.",
+          },
+          limit: {
+            type: "number",
+            description:
+              "Maximum number of messages to return (for search, default: 20, max: 100)",
+          },
+          content: {
+            type: "string",
+            description: "New message content (for edit)",
+          },
+          newTopic: {
+            type: "string",
+            description: "New topic for the message (for edit, stream messages only)",
+          },
+          propagateMode: {
+            type: "string",
+            enum: ["change_one", "change_later", "change_all"],
+            description:
+              "How to propagate topic changes (for edit with newTopic). " +
+              "'change_one' = only this message, 'change_later' = this and later, 'change_all' = all in topic. Default: 'change_one'",
+          },
+          emojiName: {
+            type: "string",
+            description:
+              "Emoji name without colons (for add_reaction/remove_reaction), e.g. 'thumbs_up', 'check', 'eyes'",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg);
+
+        switch (params.action) {
+          case "get": {
+            if (!params.messageId) {
+              return {
+                content: [
+                  { type: "text", text: "Error: messageId is required for get." },
+                ],
+              };
+            }
+            const msg = await getZulipSingleMessage(client, params.messageId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: formatMessageDetails(msg),
+                },
+              ],
+            };
+          }
+
+          case "search": {
+            const narrow: Array<{ operator: string; operand: string | number }> = [];
+            if (params.streamName) {
+              narrow.push({ operator: "stream", operand: params.streamName });
+            }
+            if (params.topic) {
+              narrow.push({ operator: "topic", operand: params.topic });
+            }
+            if (params.senderId) {
+              narrow.push({ operator: "sender", operand: params.senderId });
+            }
+            if (params.query) {
+              narrow.push({ operator: "search", operand: params.query });
+            }
+
+            const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
+            const result = await getZulipMessages(client, {
+              anchor: "newest",
+              numBefore: limit,
+              numAfter: 0,
+              narrow: narrow.length > 0 ? narrow : undefined,
+            });
+
+            const messages = result.messages;
+            if (messages.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "No messages found matching the criteria." },
+                ],
+              };
+            }
+
+            const lines = messages.map((m) => formatMessageDetails(m));
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${messages.length} message(s) found:\n\n${lines.join("\n\n---\n\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "edit": {
+            if (!params.messageId) {
+              return {
+                content: [
+                  { type: "text", text: "Error: messageId is required for edit." },
+                ],
+              };
+            }
+            if (!params.content && !params.newTopic) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide content and/or newTopic to edit.",
+                  },
+                ],
+              };
+            }
+            await updateZulipMessage(client, params.messageId, {
+              content: params.content,
+              topic: params.newTopic,
+              propagateMode: params.propagateMode ?? "change_one",
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Message ${params.messageId} updated ✅`,
+                },
+              ],
+            };
+          }
+
+          case "delete": {
+            if (!params.messageId) {
+              return {
+                content: [
+                  { type: "text", text: "Error: messageId is required for delete." },
+                ],
+              };
+            }
+            await deleteZulipMessage(client, params.messageId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Message ${params.messageId} deleted ✅`,
+                },
+              ],
+            };
+          }
+
+          case "add_reaction": {
+            if (!params.messageId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: messageId is required for add_reaction.",
+                  },
+                ],
+              };
+            }
+            if (!params.emojiName) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: emojiName is required for add_reaction.",
+                  },
+                ],
+              };
+            }
+            await addZulipReaction(client, params.messageId, params.emojiName);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Added :${params.emojiName}: to message ${params.messageId} ✅`,
+                },
+              ],
+            };
+          }
+
+          case "remove_reaction": {
+            if (!params.messageId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: messageId is required for remove_reaction.",
+                  },
+                ],
+              };
+            }
+            if (!params.emojiName) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: emojiName is required for remove_reaction.",
+                  },
+                ],
+              };
+            }
+            await removeZulipReaction(
+              client,
+              params.messageId,
+              params.emojiName,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Removed :${params.emojiName}: from message ${params.messageId} ✅`,
                 },
               ],
             };
