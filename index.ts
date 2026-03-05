@@ -2036,14 +2036,36 @@ const plugin = {
         const client = getClient(cfg, params.accountId);
         const propagateMode = params.propagateMode ?? "change_all";
 
+        // Cached stream lookups to avoid repeated API calls within one execution
+        let cachedSubscriptions: any[] | null = null;
+        let cachedStreams: any[] | null = null;
+
+        const findStreamByName = async (name: string) => {
+          const lowerName = name.toLowerCase();
+
+          if (!cachedSubscriptions) {
+            cachedSubscriptions = await listZulipSubscriptions(client);
+          }
+          let found =
+            cachedSubscriptions.find(
+              (s) => s.name.toLowerCase() === lowerName,
+            ) ?? null;
+
+          if (!found) {
+            if (!cachedStreams) {
+              cachedStreams = await listZulipStreams(client);
+            }
+            found =
+              cachedStreams.find(
+                (s) => s.name.toLowerCase() === lowerName,
+              ) ?? null;
+          }
+
+          return found;
+        };
+
         // Resolve stream name to stream object
-        const stream =
-          (await listZulipSubscriptions(client)).find(
-            (s) => s.name.toLowerCase() === params.streamName.toLowerCase(),
-          ) ??
-          (await listZulipStreams(client)).find(
-            (s) => s.name.toLowerCase() === params.streamName.toLowerCase(),
-          );
+        const stream = await findStreamByName(params.streamName);
         if (!stream) {
           return {
             content: [
@@ -2217,17 +2239,7 @@ const plugin = {
 
             let targetLabel = params.streamName;
             if (params.targetStreamName) {
-              const targetStream =
-                (await listZulipSubscriptions(client)).find(
-                  (s) =>
-                    s.name.toLowerCase() ===
-                    params.targetStreamName.toLowerCase(),
-                ) ??
-                (await listZulipStreams(client)).find(
-                  (s) =>
-                    s.name.toLowerCase() ===
-                    params.targetStreamName.toLowerCase(),
-                );
+              const targetStream = await findStreamByName(params.targetStreamName);
               if (!targetStream) {
                 return {
                   content: [
@@ -2248,11 +2260,19 @@ const plugin = {
             );
 
             const finalTopic = params.newTopic ?? params.topic;
+            const scopeLabel =
+              propagateMode === "change_one" ? "Message moved" : "Topic moved";
+            const scopeNote =
+              propagateMode === "change_one"
+                ? " (only the anchor message was moved; the topic may now be split)"
+                : "";
             return {
               content: [
                 {
                   type: "text",
-                  text: `Topic moved: #${params.streamName} > ${params.topic} \u2192 #${targetLabel} > ${finalTopic} \u2705`,
+                  text:
+                    `${scopeLabel}: #${params.streamName} > ${params.topic} ` +
+                    `\u2192 #${targetLabel} > ${finalTopic}${scopeNote} \u2705`,
                 },
               ],
             };
@@ -2260,26 +2280,19 @@ const plugin = {
 
           case "delete": {
             // Use the dedicated delete_topic endpoint which deletes all messages in the topic.
-            // It processes in batches; repeat if not complete.
-            let complete = false;
-            let rounds = 0;
-            const maxRounds = 20; // safety limit
-            while (!complete && rounds < maxRounds) {
-              const result = await deleteZulipTopic(
-                client,
-                stream.stream_id,
-                params.topic,
-              );
-              complete = result.complete;
-              rounds++;
-            }
+            // It processes in batches; this action performs a single batch per invocation.
+            const result = await deleteZulipTopic(
+              client,
+              stream.stream_id,
+              params.topic,
+            );
             return {
               content: [
                 {
                   type: "text",
-                  text: complete
+                  text: result.complete
                     ? `Topic deleted: #${params.streamName} > ${params.topic} \u2705`
-                    : `Topic deletion in progress (${rounds} batch(es) processed). ` +
+                    : `Topic deletion in progress (batch processed). ` +
                       `Some messages may remain; repeat the action to continue.`,
                 },
               ],
