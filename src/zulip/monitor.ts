@@ -127,7 +127,7 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
 
   const dmPolicy = account.config.dmPolicy ?? "pairing";
   const configAllowFrom = normalizeAllowList(account.config.allowFrom ?? []);
-  const autoReplyStreams: string[] = (account.config as any).autoReplyStreams ?? [];
+  const autoReplyStreams: string[] = account.autoReplyStreams ?? [];
 
   const getEffectiveAllowFrom = async (): Promise<string[]> => {
     const storeAllowFrom = normalizeAllowList(
