@@ -46,6 +46,8 @@ import {
   updateZulipLinkifier,
   removeZulipLinkifier,
   reorderZulipLinkifiers,
+  getZulipUserStatus,
+  updateZulipOwnStatus,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -2498,6 +2500,164 @@ const plugin = {
                   type: "text",
                   text: `Linkifiers reordered ✅ (new order: ${params.orderedIds.join(", ")})`,
                 },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_user_status",
+      description:
+        "Get or set user status in Zulip. " +
+        "User status includes a text message and an optional emoji that appear next to the user's name. " +
+        "Use 'get' to check any user's current status, or 'set' to update the bot's own status.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["get", "set", "clear"],
+            description:
+              "Action to perform: 'get' retrieves a user's status, " +
+              "'set' updates the bot's own status, 'clear' removes the bot's status.",
+          },
+          userId: {
+            type: "number",
+            description:
+              "User ID to get status for (for 'get' action). Use zulip_users to find user IDs.",
+          },
+          statusText: {
+            type: "string",
+            description:
+              "Status text to display (for 'set' action). Max 60 characters. " +
+              "Examples: 'In a meeting', 'On vacation', 'Working on PR #42'.",
+          },
+          emojiName: {
+            type: "string",
+            description:
+              "Emoji name to display with the status (for 'set' action), without colons. " +
+              "Examples: 'calendar', 'palm_tree', 'hammer_and_wrench'. " +
+              "Use zulip_custom_emoji list to see available custom emoji.",
+          },
+          away: {
+            type: "boolean",
+            description:
+              "Whether to mark the user as away (for 'set' action). " +
+              "When true, the user appears as unavailable regardless of actual presence.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "get": {
+            if (!params.userId) {
+              return {
+                content: [
+                  { type: "text", text: "Error: userId is required for get." },
+                ],
+              };
+            }
+            const status = await getZulipUserStatus(client, params.userId);
+            const hasStatus =
+              status.status_text || status.emoji_name || status.away;
+            if (!hasStatus) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `User ${params.userId} has no status set.`,
+                  },
+                ],
+              };
+            }
+            const parts: string[] = [];
+            if (status.emoji_name) {
+              parts.push(`Emoji: :${status.emoji_name}:`);
+            }
+            if (status.status_text) {
+              parts.push(`Text: "${status.status_text}"`);
+            }
+            if (status.away) {
+              parts.push("Away: Yes 🔴");
+            }
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Status for user ${params.userId}:\n${parts.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "set": {
+            if (!params.statusText && !params.emojiName && params.away === undefined) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide at least one of statusText, emojiName, or away for set.",
+                  },
+                ],
+              };
+            }
+            if (params.statusText && params.statusText.length > 60) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: statusText must be 60 characters or fewer.",
+                  },
+                ],
+              };
+            }
+            await updateZulipOwnStatus(client, {
+              statusText: params.statusText,
+              emojiName: params.emojiName,
+              away: params.away,
+            });
+            const parts: string[] = [];
+            if (params.emojiName) parts.push(`:${params.emojiName}:`);
+            if (params.statusText) parts.push(`"${params.statusText}"`);
+            if (params.away === true) parts.push("(away)");
+            if (params.away === false) parts.push("(not away)");
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Status updated: ${parts.join(" ")} ✅`,
+                },
+              ],
+            };
+          }
+
+          case "clear": {
+            await updateZulipOwnStatus(client, {
+              statusText: "",
+              emojiName: "",
+              away: false,
+            });
+            return {
+              content: [
+                { type: "text", text: "Status cleared ✅" },
               ],
             };
           }
