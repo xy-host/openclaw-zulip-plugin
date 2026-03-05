@@ -815,3 +815,83 @@ export async function deactivateZulipCustomEmoji(
     { method: "DELETE" },
   );
 }
+
+// ── Drafts ──
+
+export type ZulipDraft = {
+  id: number;
+  type: "stream" | "private";
+  to: number[];
+  topic: string;
+  content: string;
+  timestamp: number;
+};
+
+export async function listZulipDrafts(
+  client: ZulipClient,
+): Promise<ZulipDraft[]> {
+  const data = await client.request<{ drafts: ZulipDraft[] }>("/drafts");
+  return data.drafts ?? [];
+}
+
+export async function createZulipDraft(
+  client: ZulipClient,
+  params: {
+    type: "stream" | "private";
+    to: number[];
+    topic?: string;
+    content: string;
+  },
+): Promise<number[]> {
+  const draft: Record<string, unknown> = {
+    type: params.type,
+    to: params.to,
+    content: params.content,
+  };
+  if (params.topic !== undefined) draft.topic = params.topic;
+  // Always include a timestamp so the server knows when the draft was composed
+  draft.timestamp = Math.floor(Date.now() / 1000);
+
+  const body = new URLSearchParams();
+  body.set("drafts", JSON.stringify([draft]));
+  const data = await client.request<{ ids: number[]; result: string }>("/drafts", {
+    method: "POST",
+    body: body.toString(),
+  });
+  return data.ids ?? [];
+}
+
+export async function editZulipDraft(
+  client: ZulipClient,
+  draftId: number,
+  params: {
+    type: "stream" | "private";
+    to: number[];
+    topic?: string;
+    content: string;
+  },
+): Promise<void> {
+  const draft: Record<string, unknown> = {
+    type: params.type,
+    to: params.to,
+    content: params.content,
+    timestamp: Math.floor(Date.now() / 1000),
+  };
+  if (params.topic !== undefined) draft.topic = params.topic;
+
+  const body = new URLSearchParams();
+  body.set("draft", JSON.stringify(draft));
+  await client.request<{ result: string }>(`/drafts/${draftId}`, {
+    method: "PATCH",
+    body: body.toString(),
+  });
+}
+
+export async function deleteZulipDraft(
+  client: ZulipClient,
+  draftId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(`/drafts/${draftId}`, {
+    method: "DELETE",
+  });
+}

@@ -36,6 +36,10 @@ import {
   listZulipCustomEmoji,
   uploadZulipCustomEmoji,
   deactivateZulipCustomEmoji,
+  listZulipDrafts,
+  createZulipDraft,
+  editZulipDraft,
+  deleteZulipDraft,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -1660,6 +1664,317 @@ const plugin = {
                   type: "text",
                   text: `Unknown action: ${params.action}`,
                 },
+              ],
+            };
+        }
+      },
+    });
+
+
+    api.registerTool({
+      name: "zulip_drafts",
+      description:
+        "List, create, edit, or delete message drafts in Zulip. " +
+        "Drafts are unsent messages saved on the server that appear in the user's compose box. " +
+        "Use to prepare messages for later review, save work-in-progress messages, or manage existing drafts.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["list", "create", "edit", "delete"],
+            description: "Action to perform",
+          },
+          draftId: {
+            type: "number",
+            description: "Draft ID (for edit/delete)",
+          },
+          streamName: {
+            type: "string",
+            description:
+              "Stream name for the draft target (for create/edit). Mutually exclusive with userId.",
+          },
+          topic: {
+            type: "string",
+            description:
+              "Topic within the stream (for create/edit when targeting a stream).",
+          },
+          userId: {
+            type: "string",
+            description:
+              "User ID for a DM draft (for create/edit). Mutually exclusive with streamName.",
+          },
+          content: {
+            type: "string",
+            description: "Draft message content in Zulip markdown (for create/edit).",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "list": {
+            const drafts = await listZulipDrafts(client);
+            if (drafts.length === 0) {
+              return {
+                content: [{ type: "text", text: "No drafts found." }],
+              };
+            }
+            const lines: string[] = [];
+            for (const d of drafts) {
+              const date = new Date(d.timestamp * 1000).toISOString();
+              let target: string;
+              if (d.type === "stream") {
+                const streams = await listZulipStreams(client).catch(() => []);
+                const streamId = d.to[0];
+                const stream = streams.find((s) => s.stream_id === streamId);
+                const streamLabel = stream ? stream.name : String(streamId);
+                target = `#${streamLabel}${d.topic ? ` > ${d.topic}` : ""}`;
+              } else {
+                target = `DM to ${JSON.stringify(d.to)}`;
+              }
+              const preview =
+                d.content.length > 200
+                  ? d.content.slice(0, 200) + "\u2026"
+                  : d.content;
+              lines.push(`- **[${d.id}]** \u2192 ${target} (${date})\n  ${preview}`);
+            }
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${drafts.length} draft(s):\n\n${lines.join("\n\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "create": {
+            if (!params.content) {
+              return {
+                content: [
+                  { type: "text", text: "Error: content is required for create." },
+                ],
+              };
+            }
+            if (params.streamName && params.userId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide only one of streamName or userId for create.",
+                  },
+                ],
+              };
+            }
+            if (!params.streamName && !params.userId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide either streamName or userId for create.",
+                  },
+                ],
+              };
+            }
+
+            if (params.streamName) {
+              const stream =
+                (await listZulipSubscriptions(client)).find(
+                  (s) =>
+                    s.name.toLowerCase() === params.streamName.toLowerCase(),
+                ) ??
+                (await listZulipStreams(client)).find(
+                  (s) =>
+                    s.name.toLowerCase() === params.streamName.toLowerCase(),
+                );
+              if (!stream) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: stream "${params.streamName}" not found.`,
+                    },
+                  ],
+                };
+              }
+              const ids = await createZulipDraft(client, {
+                type: "stream",
+                to: [stream.stream_id],
+                topic: params.topic ?? "(no topic)",
+                content: params.content,
+              });
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      `Draft created (id:${ids[0]}) for ` +
+                      `#${params.streamName} > ${params.topic ?? "(no topic)"} \u2705`,
+                  },
+                ],
+              };
+            } else {
+              const userId = Number(params.userId);
+              if (!Number.isFinite(userId) || userId <= 0) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: "Error: userId must be a valid positive numeric user ID.",
+                    },
+                  ],
+                };
+              }
+              const ids = await createZulipDraft(client, {
+                type: "private",
+                to: [userId],
+                content: params.content,
+              });
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Draft created (id:${ids[0]}) for DM to user ${params.userId} \u2705`,
+                  },
+                ],
+              };
+            }
+          }
+
+          case "edit": {
+            if (!params.draftId) {
+              return {
+                content: [
+                  { type: "text", text: "Error: draftId is required for edit." },
+                ],
+              };
+            }
+            if (!params.content) {
+              return {
+                content: [
+                  { type: "text", text: "Error: content is required for edit." },
+                ],
+              };
+            }
+            if (params.streamName && params.userId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide only one of streamName or userId for edit.",
+                  },
+                ],
+              };
+            }
+
+            // Fetch the existing draft to get its current target if not overridden
+            const existingDrafts = await listZulipDrafts(client);
+            const existing = existingDrafts.find((d) => d.id === params.draftId);
+            if (!existing) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: draft ${params.draftId} not found.`,
+                  },
+                ],
+              };
+            }
+
+            let draftType = existing.type;
+            let draftTo = existing.to;
+            let draftTopic = existing.topic;
+
+            if (params.streamName) {
+              const stream =
+                (await listZulipSubscriptions(client)).find(
+                  (s) =>
+                    s.name.toLowerCase() === params.streamName.toLowerCase(),
+                ) ??
+                (await listZulipStreams(client)).find(
+                  (s) =>
+                    s.name.toLowerCase() === params.streamName.toLowerCase(),
+                );
+              if (!stream) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: stream "${params.streamName}" not found.`,
+                    },
+                  ],
+                };
+              }
+              draftType = "stream";
+              draftTo = [stream.stream_id];
+              draftTopic = params.topic ?? "(no topic)";
+            } else if (params.userId) {
+              const userId = Number(params.userId);
+              if (!Number.isFinite(userId) || userId <= 0) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: "Error: userId must be a valid positive numeric user ID.",
+                    },
+                  ],
+                };
+              }
+              draftType = "private";
+              draftTo = [userId];
+              draftTopic = "";
+            } else if (params.topic) {
+              draftTopic = params.topic;
+            }
+
+            await editZulipDraft(client, params.draftId, {
+              type: draftType,
+              to: draftTo,
+              topic: draftTopic,
+              content: params.content,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Draft ${params.draftId} updated \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "delete": {
+            if (!params.draftId) {
+              return {
+                content: [
+                  { type: "text", text: "Error: draftId is required for delete." },
+                ],
+              };
+            }
+            await deleteZulipDraft(client, params.draftId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Draft ${params.draftId} deleted \u2705`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
               ],
             };
         }
