@@ -1,6 +1,15 @@
 import type { OpenClawConfig } from "openclaw/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk";
 
+export type MultiBotConfig = {
+  /** List of bot user IDs that are allowed to trigger this bot */
+  allowBotIds?: Array<string | number>;
+  /** Maximum consecutive bot-to-bot replies in a conversation before stopping (default: 3) */
+  maxBotChainLength?: number;
+  /** Cooldown period in milliseconds after a bot-chain limit is reached (default: 60000) */
+  botCooldownMs?: number;
+};
+
 export type ZulipAccountConfig = {
   enabled?: boolean;
   name?: string;
@@ -16,6 +25,8 @@ export type ZulipAccountConfig = {
   blockStreaming?: boolean;
   blockStreamingCoalesce?: { minChars?: number; idleMs?: number };
   autoReplyStreams?: string[];
+  /** Multi-bot conversation settings */
+  multiBot?: MultiBotConfig;
 };
 
 export type ResolvedZulipAccount = {
@@ -31,6 +42,7 @@ export type ResolvedZulipAccount = {
   blockStreaming?: boolean;
   blockStreamingCoalesce?: ZulipAccountConfig["blockStreamingCoalesce"];
   autoReplyStreams?: string[];
+  multiBot?: MultiBotConfig;
 };
 
 function mergeZulipAccountConfig(
@@ -43,7 +55,11 @@ function mergeZulipAccountConfig(
   if (!section) return {};
   const { accounts: _ignored, ...base } = section;
   const account = section.accounts?.[accountId] ?? {};
-  return { ...base, ...account };
+  // Deep merge multiBot config so account-level overrides base-level
+  const mergedMultiBot = base.multiBot || account.multiBot
+    ? { ...(base.multiBot ?? {}), ...(account.multiBot ?? {}) }
+    : undefined;
+  return { ...base, ...account, ...(mergedMultiBot ? { multiBot: mergedMultiBot } : {}) };
 }
 
 export function listZulipAccountIds(cfg: OpenClawConfig): string[] {
@@ -88,5 +104,6 @@ export function resolveZulipAccount(params: {
     blockStreaming: merged.blockStreaming,
     blockStreamingCoalesce: merged.blockStreamingCoalesce,
     autoReplyStreams: merged.autoReplyStreams,
+    multiBot: merged.multiBot,
   };
 }
