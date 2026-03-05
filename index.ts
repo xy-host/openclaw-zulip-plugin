@@ -27,6 +27,12 @@ import {
   createZulipScheduledMessage,
   updateZulipScheduledMessage,
   deleteZulipScheduledMessage,
+  listZulipUserGroups,
+  createZulipUserGroup,
+  updateZulipUserGroup,
+  deleteZulipUserGroup,
+  getZulipUserGroupMembers,
+  updateZulipUserGroupMembers,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -1158,6 +1164,269 @@ const plugin = {
                 {
                   type: "text",
                   text: `Scheduled message ${params.scheduledMessageId} deleted ✅`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Unknown action: ${params.action}`,
+                },
+              ],
+            };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_user_groups",
+      description:
+        "List, create, update, or delete Zulip user groups, and manage group members. " +
+        "User groups can be mentioned with @*group_name* and are useful for organizing teams.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: [
+              "list",
+              "create",
+              "update",
+              "delete",
+              "members",
+              "add_members",
+              "remove_members",
+            ],
+            description: "Action to perform",
+          },
+          groupId: {
+            type: "number",
+            description:
+              "User group ID (for update/delete/members/add_members/remove_members)",
+          },
+          name: {
+            type: "string",
+            description: "Group name (for create/update)",
+          },
+          description: {
+            type: "string",
+            description: "Group description (for create/update)",
+          },
+          members: {
+            type: "array",
+            items: { type: "number" },
+            description:
+              "Array of user IDs to set as initial members (for create) or to add/remove (for add_members/remove_members)",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "list": {
+            const groups = await listZulipUserGroups(client);
+            // Filter out system groups by default for cleaner output
+            const userGroups = groups.filter((g) => !g.is_system_group);
+            const lines = userGroups.map(
+              (g) =>
+                `- **${g.name}** (id:${g.id}) — ${g.description || "(no description)"} [${g.members.length} members]`,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    lines.length > 0
+                      ? `${lines.length} user group(s):\n${lines.join("\n")}`
+                      : "No user groups found (excluding system groups).",
+                },
+              ],
+            };
+          }
+
+          case "create": {
+            if (!params.name) {
+              return {
+                content: [
+                  { type: "text", text: "Error: name is required for create." },
+                ],
+              };
+            }
+            await createZulipUserGroup(client, {
+              name: params.name,
+              description: params.description,
+              members: params.members ?? [],
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `User group **${params.name}** created ✅${params.members?.length ? ` with ${params.members.length} member(s)` : ""}`,
+                },
+              ],
+            };
+          }
+
+          case "update": {
+            if (!params.groupId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: groupId is required for update.",
+                  },
+                ],
+              };
+            }
+            if (!params.name && !params.description) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide name and/or description to update.",
+                  },
+                ],
+              };
+            }
+            await updateZulipUserGroup(client, params.groupId, {
+              name: params.name,
+              description: params.description,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `User group ${params.groupId} updated ✅`,
+                },
+              ],
+            };
+          }
+
+          case "delete": {
+            if (!params.groupId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: groupId is required for delete.",
+                  },
+                ],
+              };
+            }
+            await deleteZulipUserGroup(client, params.groupId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `User group ${params.groupId} deleted ✅`,
+                },
+              ],
+            };
+          }
+
+          case "members": {
+            if (!params.groupId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: groupId is required for members.",
+                  },
+                ],
+              };
+            }
+            const members = await getZulipUserGroupMembers(
+              client,
+              params.groupId,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    members.length > 0
+                      ? `Group has ${members.length} member(s): ${members.join(", ")}`
+                      : "Group has no members.",
+                },
+              ],
+            };
+          }
+
+          case "add_members": {
+            if (!params.groupId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: groupId is required for add_members.",
+                  },
+                ],
+              };
+            }
+            if (!params.members || params.members.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: members array is required for add_members.",
+                  },
+                ],
+              };
+            }
+            await updateZulipUserGroupMembers(client, params.groupId, {
+              add: params.members,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Added ${params.members.length} member(s) to group ${params.groupId} ✅`,
+                },
+              ],
+            };
+          }
+
+          case "remove_members": {
+            if (!params.groupId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: groupId is required for remove_members.",
+                  },
+                ],
+              };
+            }
+            if (!params.members || params.members.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: members array is required for remove_members.",
+                  },
+                ],
+              };
+            }
+            await updateZulipUserGroupMembers(client, params.groupId, {
+              remove: params.members,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Removed ${params.members.length} member(s) from group ${params.groupId} ✅`,
                 },
               ],
             };

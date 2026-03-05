@@ -667,3 +667,97 @@ export async function deleteZulipScheduledMessage(
     { method: "DELETE" },
   );
 }
+
+// ── User Groups ──
+
+export type ZulipUserGroup = {
+  id: number;
+  name: string;
+  description: string;
+  members: number[];
+  is_system_group: boolean;
+};
+
+export async function listZulipUserGroups(
+  client: ZulipClient,
+): Promise<ZulipUserGroup[]> {
+  const data = await client.request<{ user_groups: ZulipUserGroup[] }>(
+    "/user_groups",
+  );
+  return data.user_groups ?? [];
+}
+
+export async function createZulipUserGroup(
+  client: ZulipClient,
+  params: {
+    name: string;
+    description?: string;
+    members: number[];
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("name", params.name);
+  body.set("description", params.description ?? "");
+  body.set("members", JSON.stringify(params.members));
+  await client.request<{ result: string }>("/user_groups/create", {
+    method: "POST",
+    body: body.toString(),
+  });
+}
+
+export async function updateZulipUserGroup(
+  client: ZulipClient,
+  groupId: number,
+  params: {
+    name?: string;
+    description?: string;
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  if (params.name !== undefined) body.set("name", params.name);
+  if (params.description !== undefined) body.set("description", params.description);
+  await client.request<{ result: string }>(`/user_groups/${groupId}`, {
+    method: "PATCH",
+    body: body.toString(),
+  });
+}
+
+export async function deleteZulipUserGroup(
+  client: ZulipClient,
+  groupId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(`/user_groups/${groupId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getZulipUserGroupMembers(
+  client: ZulipClient,
+  groupId: number,
+): Promise<number[]> {
+  const data = await client.request<{ members: number[] }>(
+    `/user_groups/${groupId}/members`,
+  );
+  return data.members ?? [];
+}
+
+export async function updateZulipUserGroupMembers(
+  client: ZulipClient,
+  groupId: number,
+  params: {
+    add?: number[];
+    remove?: number[];
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  if (params.add && params.add.length > 0) {
+    body.set("add", JSON.stringify(params.add));
+  }
+  if (params.remove && params.remove.length > 0) {
+    body.set("delete", JSON.stringify(params.remove));
+  }
+  await client.request<{ result: string }>(
+    `/user_groups/${groupId}/members`,
+    { method: "POST", body: body.toString() },
+  );
+}
