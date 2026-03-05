@@ -916,3 +916,76 @@ export async function deleteZulipTopic(
   );
   return { complete: data.complete };
 }
+
+// ── Linkifiers ──
+
+export type ZulipLinkifier = {
+  id: number;
+  pattern: string;
+  url_template: string;
+};
+
+export async function listZulipLinkifiers(
+  client: ZulipClient,
+): Promise<ZulipLinkifier[]> {
+  const data = await client.request<{ linkifiers: ZulipLinkifier[] }>(
+    "/realm/linkifiers",
+  );
+  return data.linkifiers ?? [];
+}
+
+export async function addZulipLinkifier(
+  client: ZulipClient,
+  params: {
+    pattern: string;
+    urlTemplate: string;
+  },
+): Promise<{ id: number }> {
+  const body = new URLSearchParams();
+  body.set("pattern", params.pattern);
+  body.set("url_template", params.urlTemplate);
+  const data = await client.request<{ id: number; result: string }>(
+    "/realm/filters",
+    { method: "POST", body: body.toString() },
+  );
+  return { id: data.id };
+}
+
+export async function updateZulipLinkifier(
+  client: ZulipClient,
+  filterId: number,
+  params: {
+    pattern: string;
+    urlTemplate: string;
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("pattern", params.pattern);
+  body.set("url_template", params.urlTemplate);
+  await client.request<{ result: string }>(
+    `/realm/filters/${filterId}`,
+    { method: "PATCH", body: body.toString() },
+  );
+}
+
+export async function removeZulipLinkifier(
+  client: ZulipClient,
+  filterId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/realm/filters/${filterId}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function reorderZulipLinkifiers(
+  client: ZulipClient,
+  orderedIds: number[],
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("ordered_linkifier_ids", JSON.stringify(orderedIds));
+  await client.request<{ result: string }>(
+    "/realm/linkifiers",
+    { method: "PATCH", body: body.toString() },
+  );
+}
