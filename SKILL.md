@@ -1,6 +1,6 @@
 ---
 name: zulip
-description: "Interact with Zulip messaging. Use when: sending messages to Zulip streams/DMs, managing streams, looking up users, or responding in Zulip channels. Covers formatting, topic conventions, and tool usage."
+description: "Interact with Zulip messaging. Use when: sending messages to Zulip streams/DMs, managing streams, looking up users, searching/editing messages, or responding in Zulip channels. Covers formatting, topic conventions, and tool usage."
 metadata: { "openclaw": { "emoji": "💬" } }
 ---
 
@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Three tools are available:
+Four tools are available:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -51,6 +51,33 @@ Look up and manage users. Actions:
 - Use `get_by_email` when you know someone's email but not their Zulip ID
 - The `presence` action shows per-client status (web, desktop, mobile) with last-seen timestamps
 - By default, `list` excludes bots and deactivated users — set `includeBots: true` or `includeDeactivated: true` to include them
+
+### `zulip_messages`
+Search, fetch, edit, delete messages and manage emoji reactions. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `get` | `messageId` | Fetch a single message by ID with full details |
+| `search` | (see filters below) | Search/retrieve messages with optional filters |
+| `edit` | `messageId` + `content` and/or `newTopic` | Edit a message the bot sent |
+| `delete` | `messageId` | Delete a message the bot sent |
+| `add_reaction` | `messageId`, `emojiName` | Add an emoji reaction to a message |
+| `remove_reaction` | `messageId`, `emojiName` | Remove an emoji reaction from a message |
+
+**Search filters** (all optional, combine as needed):
+- `streamName` — filter by stream
+- `topic` — filter by topic within the stream
+- `senderId` — filter by sender user ID
+- `query` — free-text search (supports Zulip search operators)
+- `limit` — max results (default: 20, max: 100)
+
+**Tips**:
+- Use `search` with `streamName` + `topic` to get recent message history for a conversation
+- Use `search` with `query` for full-text search across all accessible messages
+- `edit` and `delete` only work on messages the bot has permission to modify (typically its own messages)
+- When editing a topic, use `propagateMode` to control how the rename applies: `change_one` (default), `change_later`, or `change_all`
+- `emojiName` should be without colons, e.g. `thumbs_up`, `check`, `eyes`, `tada`
+- Use `get` to fetch full message details including content, sender info, and reactions
 
 ## Formatting (Zulip Markdown)
 
@@ -121,3 +148,4 @@ When the agent receives a message from a Zulip stream:
    - ✅ `streamName="engineering"`, `topic="weekly-sync"`
 8. **Don't parse Zulip markdown refs as names**: Stream links like `#**general>announcements**` are display formatting. Extract the plain name and topic separately
 9. **Finding user IDs for DMs**: Use `zulip_users` with `list` or `get_by_email` to find user IDs — don't guess or hardcode them
+10. **Message editing scope**: `zulip_messages` `edit` and `delete` require appropriate permissions — bots can typically only edit/delete their own messages

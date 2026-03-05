@@ -45,6 +45,7 @@ A custom [Zulip](https://zulip.com) channel plugin for [OpenClaw](https://github
 | `zulip_streams` | List, create, join, leave, update, delete streams; list topics and members |
 | `zulip_send` | Send messages to streams (with topic) or DMs |
 | `zulip_users` | List users, look up by ID or email, check presence status |
+| `zulip_messages` | Search/fetch messages, edit/delete bot messages, add/remove emoji reactions |
 
 ## Configuration
 

@@ -462,3 +462,107 @@ export async function getZulipUserPresence(
   );
   return { presence: data.presence };
 }
+
+// ── Messages ──
+
+export type ZulipMessageDetails = {
+  id: number;
+  sender_id: number;
+  sender_email: string;
+  sender_full_name: string;
+  type: "stream" | "private";
+  stream_id?: number;
+  display_recipient: string | Array<{ id: number; email: string; full_name: string }>;
+  subject: string;
+  content: string;
+  timestamp: number;
+  reactions: Array<{
+    emoji_name: string;
+    user_id: number;
+  }>;
+  flags: string[];
+};
+
+export type ZulipGetMessagesResult = {
+  messages: ZulipMessageDetails[];
+  found_anchor: boolean;
+  found_oldest: boolean;
+  found_newest: boolean;
+};
+
+export async function getZulipMessages(
+  client: ZulipClient,
+  params: {
+    anchor: string | number;
+    numBefore: number;
+    numAfter: number;
+    narrow?: Array<{ operator: string; operand: string | number }>;
+    applyMarkdown?: boolean;
+  },
+): Promise<ZulipGetMessagesResult> {
+  const qs = new URLSearchParams();
+  qs.set("anchor", String(params.anchor));
+  qs.set("num_before", String(params.numBefore));
+  qs.set("num_after", String(params.numAfter));
+  if (params.narrow) {
+    qs.set("narrow", JSON.stringify(params.narrow));
+  }
+  qs.set("apply_markdown", params.applyMarkdown === true ? "true" : "false");
+  const data = await client.request<ZulipGetMessagesResult & { result: string }>(
+    `/messages?${qs.toString()}`,
+  );
+  return data;
+}
+
+export async function getZulipSingleMessage(
+  client: ZulipClient,
+  messageId: number,
+): Promise<ZulipMessageDetails> {
+  const qs = new URLSearchParams();
+  qs.set("apply_markdown", "false");
+  const data = await client.request<{ message: ZulipMessageDetails; result: string }>(
+    `/messages/${messageId}?${qs.toString()}`,
+  );
+  return data.message;
+}
+
+export async function updateZulipMessage(
+  client: ZulipClient,
+  messageId: number,
+  params: {
+    content?: string;
+    topic?: string;
+    propagateMode?: "change_one" | "change_later" | "change_all";
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  if (params.content !== undefined) body.set("content", params.content);
+  if (params.topic !== undefined) body.set("topic", params.topic);
+  if (params.propagateMode !== undefined) body.set("propagate_mode", params.propagateMode);
+  await client.request<{ result: string }>(`/messages/${messageId}`, {
+    method: "PATCH",
+    body: body.toString(),
+  });
+}
+
+export async function deleteZulipMessage(
+  client: ZulipClient,
+  messageId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(`/messages/${messageId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function removeZulipReaction(
+  client: ZulipClient,
+  messageId: number,
+  emojiName: string,
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("emoji_name", emojiName);
+  await client.request<{ result: string }>(`/messages/${messageId}/reactions`, {
+    method: "DELETE",
+    body: body.toString(),
+  });
+}
