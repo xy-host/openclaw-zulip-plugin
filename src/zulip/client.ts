@@ -56,6 +56,49 @@ async function readZulipError(res: Response): Promise<string> {
   return await res.text();
 }
 
+/**
+ * Combine multiple AbortSignals into one. Uses native AbortSignal.any()
+ * when available (Node.js >= 20), falls back to manual listener wiring.
+ *
+ * Returns { signal, cleanup } — caller MUST invoke cleanup() when the
+ * combined signal is no longer needed to avoid listener leaks in the
+ * polyfill path.
+ */
+function combineAbortSignals(...signals: AbortSignal[]): {
+  signal: AbortSignal;
+  cleanup: () => void;
+} {
+  const valid = signals.filter(Boolean);
+  if (valid.length === 0) {
+    return { signal: new AbortController().signal, cleanup: () => {} };
+  }
+  if (valid.length === 1) {
+    return { signal: valid[0], cleanup: () => {} };
+  }
+  if (typeof AbortSignal.any === "function") {
+    return { signal: AbortSignal.any(valid), cleanup: () => {} };
+  }
+  // Polyfill for Node.js < 20
+  const controller = new AbortController();
+  const listeners: Array<{ signal: AbortSignal; handler: () => void }> = [];
+  for (const sig of valid) {
+    if (sig.aborted) {
+      controller.abort(sig.reason);
+      return { signal: controller.signal, cleanup: () => {} };
+    }
+    const handler = () => controller.abort(sig.reason);
+    sig.addEventListener("abort", handler, { once: true });
+    listeners.push({ signal: sig, handler });
+  }
+  const cleanup = () => {
+    for (const { signal: sig, handler } of listeners) {
+      sig.removeEventListener("abort", handler);
+    }
+    listeners.length = 0;
+  };
+  return { signal: controller.signal, cleanup };
+}
+
 export function createZulipClient(params: {
   serverUrl: string;
   botEmail: string;
@@ -127,11 +170,11 @@ export async function pollZulipEvents(
   // Timeout for long-polling: 90s (Zulip server default is ~60s)
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 90_000);
-  const combinedSignal = signal
-    ? AbortSignal.any([signal, controller.signal])
-    : controller.signal;
+  const combined = signal
+    ? combineAbortSignals(signal, controller.signal)
+    : { signal: controller.signal, cleanup: () => {} };
   try {
-    const res = await fetch(url, { headers, signal: combinedSignal });
+    const res = await fetch(url, { headers, signal: combined.signal });
     clearTimeout(timeout);
     if (!res.ok) {
       const detail = await readZulipError(res);
@@ -146,6 +189,8 @@ export async function pollZulipEvents(
   } catch (err) {
     clearTimeout(timeout);
     throw err;
+  } finally {
+    combined.cleanup();
   }
 }
 
