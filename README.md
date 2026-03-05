@@ -96,6 +96,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_user_groups` | List, create, update, delete user groups and manage group members |
 | `zulip_custom_emoji` | List, upload, or deactivate custom emoji in the organization |
 | `zulip_drafts` | List, create, edit, or delete message drafts for later review |
+| `zulip_topics` | Resolve/unresolve, rename, move, or delete topics within streams |
 
 ## Configuration
 
