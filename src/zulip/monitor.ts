@@ -229,6 +229,7 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
       accountId: account.accountId,
       direction: "inbound",
     });
+    opts.statusSink?.({ lastInboundAt: Date.now() });
 
     const fromLabel = isDm
       ? `${senderName} (${senderEmail})`
@@ -366,9 +367,14 @@ export async function monitorZulipProvider(opts: MonitorZulipOpts = {}): Promise
             const text = core.channel.text.convertMarkdownTables(payload.text ?? "", tableMode);
             const chunkMode = core.channel.text.resolveChunkMode(cfg, "zulip", account.accountId);
             const chunks = core.channel.text.chunkMarkdownTextWithMode(text, textLimit, chunkMode);
+            let delivered = false;
             for (const chunk of chunks.length > 0 ? chunks : [text]) {
               if (!chunk) continue;
               await sendZulipMessage(to, chunk, { accountId: account.accountId });
+              delivered = true;
+            }
+            if (delivered) {
+              opts.statusSink?.({ lastOutboundAt: Date.now() });
             }
           });
         },
