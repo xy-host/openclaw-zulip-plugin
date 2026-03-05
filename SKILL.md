@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Five tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
+Six tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -104,6 +104,25 @@ Create, list, edit, or delete scheduled messages. Actions:
 
 ## Formatting (Zulip Markdown)
 
+### `zulip_user_groups`
+Manage user groups. User groups can be @mentioned with `@*group_name*`. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `list` | — | List all user groups (excludes system groups) |
+| `create` | `name` (+ optional `description`, `members`) | Create a new user group |
+| `update` | `groupId` (+ `name` and/or `description`) | Update group name or description |
+| `delete` | `groupId` | Delete a user group |
+| `members` | `groupId` | List member user IDs of a group |
+| `add_members` | `groupId`, `members` | Add users to a group |
+| `remove_members` | `groupId`, `members` | Remove users from a group |
+
+**Tips**:
+- Use `list` to find group IDs — you need the numeric `groupId` for most actions
+- The `members` param is an array of numeric user IDs, e.g. `[12345, 67890]`
+- System groups (built-in Zulip groups) are excluded from `list` output for clarity
+- Use `zulip_users` → `list` to find user IDs before adding members
+
 Zulip uses its own markdown variant. Key differences from other platforms:
 
 ### Supported
@@ -158,7 +177,7 @@ When the agent receives a message from a Zulip stream:
 
 ## Multi-Account
 
-All five tools accept an optional `accountId` parameter. When your configuration defines multiple Zulip accounts under `channels.zulip.accounts`, pass `accountId` to target a specific account. If omitted, the primary/default account is used.
+All six tools accept an optional `accountId` parameter. When your configuration defines multiple Zulip accounts under `channels.zulip.accounts`, pass `accountId` to target a specific account. If omitted, the primary/default account is used.
 
 Example: `{ "action": "list_all", "accountId": "work" }` — lists streams on the "work" Zulip account.
 

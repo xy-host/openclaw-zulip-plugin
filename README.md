@@ -93,6 +93,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_users` | List users, look up by ID or email, check presence status |
 | `zulip_messages` | Search/fetch messages, edit/delete bot messages, add/remove emoji reactions |
 | `zulip_scheduled_messages` | Create, list, edit, or delete scheduled messages for future delivery |
+| `zulip_user_groups` | List, create, update, delete user groups and manage group members |
 
 ## Configuration
 
