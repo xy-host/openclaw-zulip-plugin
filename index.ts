@@ -2414,7 +2414,7 @@ const plugin = {
                 {
                   type: "text",
                   text:
-                    `Linkifier added (id:${result.id}) ✅\n` +
+                    `Linkifier added [${result.id}] ✅\n` +
                     `Pattern: \`${params.pattern}\`\n` +
                     `URL template: ${params.urlTemplate}`,
                 },
@@ -2423,7 +2423,7 @@ const plugin = {
           }
 
           case "update": {
-            if (!params.filterId) {
+            if (params.filterId == null || typeof params.filterId !== "number") {
               return {
                 content: [
                   { type: "text", text: "Error: filterId is required for update." },
@@ -2453,7 +2453,7 @@ const plugin = {
                 {
                   type: "text",
                   text:
-                    `Linkifier ${params.filterId} updated ✅\n` +
+                    `Linkifier [${params.filterId}] updated ✅\n` +
                     `Pattern: \`${params.pattern}\`\n` +
                     `URL template: ${params.urlTemplate}`,
                 },
@@ -2462,7 +2462,7 @@ const plugin = {
           }
 
           case "remove": {
-            if (!params.filterId) {
+            if (params.filterId == null || typeof params.filterId !== "number") {
               return {
                 content: [
                   { type: "text", text: "Error: filterId is required for remove." },
@@ -2474,7 +2474,7 @@ const plugin = {
               content: [
                 {
                   type: "text",
-                  text: `Linkifier ${params.filterId} removed ✅`,
+                  text: `Linkifier [${params.filterId}] removed ✅`,
                 },
               ],
             };
