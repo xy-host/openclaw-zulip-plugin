@@ -761,3 +761,57 @@ export async function updateZulipUserGroupMembers(
     { method: "POST", body: body.toString() },
   );
 }
+
+// ── Custom Emoji ──
+
+export type ZulipCustomEmoji = {
+  id: string;
+  name: string;
+  source_url: string;
+  deactivated: boolean;
+  author_id: number | null;
+};
+
+export async function listZulipCustomEmoji(
+  client: ZulipClient,
+): Promise<ZulipCustomEmoji[]> {
+  const data = await client.request<{ emoji: Record<string, ZulipCustomEmoji> }>(
+    "/realm/emoji",
+  );
+  const emoji = data.emoji ?? {};
+  return Object.values(emoji);
+}
+
+export async function uploadZulipCustomEmoji(
+  client: ZulipClient,
+  emojiName: string,
+  imageBuffer: Buffer,
+  fileName?: string,
+  contentType?: string,
+): Promise<void> {
+  const form = new FormData();
+  const bytes = Uint8Array.from(imageBuffer);
+  const blob = contentType ? new Blob([bytes], { type: contentType }) : new Blob([bytes]);
+  form.append("file", blob, fileName ?? `${emojiName}.png`);
+
+  const url = `${client.serverUrl}/api/v1/realm/emoji/${encodeURIComponent(emojiName)}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: client.authHeader },
+    body: form,
+  });
+  if (!res.ok) {
+    const detail = await readZulipError(res);
+    throw new Error(`Zulip upload emoji ${res.status}: ${detail}`);
+  }
+}
+
+export async function deactivateZulipCustomEmoji(
+  client: ZulipClient,
+  emojiId: string,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/realm/emoji/${encodeURIComponent(emojiId)}`,
+    { method: "DELETE" },
+  );
+}

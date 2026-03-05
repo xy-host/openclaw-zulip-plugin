@@ -94,6 +94,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_messages` | Search/fetch messages, edit/delete bot messages, add/remove emoji reactions |
 | `zulip_scheduled_messages` | Create, list, edit, or delete scheduled messages for future delivery |
 | `zulip_user_groups` | List, create, update, delete user groups and manage group members |
+| `zulip_custom_emoji` | List, upload, or deactivate custom emoji in the organization |
 
 ## Configuration
 

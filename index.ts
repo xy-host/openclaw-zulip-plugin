@@ -33,6 +33,9 @@ import {
   deleteZulipUserGroup,
   getZulipUserGroupMembers,
   updateZulipUserGroupMembers,
+  listZulipCustomEmoji,
+  uploadZulipCustomEmoji,
+  deactivateZulipCustomEmoji,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -1444,6 +1447,225 @@ const plugin = {
         }
       },
     });
+    api.registerTool({
+      name: "zulip_custom_emoji",
+      description:
+        "List, upload, or deactivate custom emoji in the Zulip organization. " +
+        "Custom emoji can be used in messages with :emoji_name: syntax. " +
+        "Upload accepts a public image URL which will be fetched and uploaded to Zulip.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["list", "upload", "deactivate"],
+            description: "Action to perform",
+          },
+          emojiName: {
+            type: "string",
+            description:
+              "Emoji name (for upload/deactivate). Must be unique, lowercase, and use only alphanumeric characters and underscores.",
+          },
+          imageUrl: {
+            type: "string",
+            description:
+              "Public URL of the image to upload as custom emoji (for upload). " +
+              "Supported formats: PNG, GIF, JPEG. Max recommended size: 256KB.",
+          },
+          includeDeactivated: {
+            type: "boolean",
+            description:
+              "Include deactivated emoji in list results (default: false)",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "list": {
+            const allEmoji = await listZulipCustomEmoji(client);
+            const includeDeactivated = params.includeDeactivated === true;
+            const filtered = includeDeactivated
+              ? allEmoji
+              : allEmoji.filter((e) => !e.deactivated);
+            if (filtered.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: includeDeactivated
+                      ? "No custom emoji found."
+                      : "No active custom emoji found.",
+                  },
+                ],
+              };
+            }
+            const lines = filtered.map(
+              (e) =>
+                `- :${e.name}: — **${e.name}** (id:${e.id})${e.deactivated ? " ⛔ deactivated" : ""}`,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${filtered.length} custom emoji:\n${lines.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "upload": {
+            if (!params.emojiName) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: emojiName is required for upload.",
+                  },
+                ],
+              };
+            }
+            if (!params.imageUrl) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: imageUrl is required for upload.",
+                  },
+                ],
+              };
+            }
+
+            // Validate emoji name format
+            const nameRegex = /^[a-z0-9_]+$/;
+            if (!nameRegex.test(params.emojiName)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: emojiName must be lowercase and contain only alphanumeric characters and underscores.",
+                  },
+                ],
+              };
+            }
+
+            // Fetch the image from URL
+            let imageBuffer: Buffer;
+            let contentType: string | undefined;
+            let fileName: string;
+            try {
+              const response = await fetch(params.imageUrl);
+              if (!response.ok) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: failed to fetch image from URL (HTTP ${response.status}).`,
+                    },
+                  ],
+                };
+              }
+              contentType = response.headers.get("content-type") ?? undefined;
+              const arrayBuffer = await response.arrayBuffer();
+              imageBuffer = Buffer.from(arrayBuffer);
+
+              // Derive file extension from content type
+              const extMap: Record<string, string> = {
+                "image/png": ".png",
+                "image/gif": ".gif",
+                "image/jpeg": ".jpg",
+                "image/webp": ".webp",
+              };
+              const ext = contentType ? (extMap[contentType.split(";")[0].trim()] ?? ".png") : ".png";
+              fileName = `${params.emojiName}${ext}`;
+            } catch (err) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: failed to fetch image from URL: ${String(err)}`,
+                  },
+                ],
+              };
+            }
+
+            await uploadZulipCustomEmoji(
+              client,
+              params.emojiName,
+              imageBuffer,
+              fileName,
+              contentType,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Custom emoji :${params.emojiName}: uploaded ✅`,
+                },
+              ],
+            };
+          }
+
+          case "deactivate": {
+            if (!params.emojiName) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: emojiName is required for deactivate.",
+                  },
+                ],
+              };
+            }
+
+            // Look up emoji ID by name
+            const allEmoji = await listZulipCustomEmoji(client);
+            const target = allEmoji.find(
+              (e) => e.name === params.emojiName && !e.deactivated,
+            );
+            if (!target) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: active custom emoji ":${params.emojiName}:" not found.`,
+                  },
+                ],
+              };
+            }
+
+            await deactivateZulipCustomEmoji(client, target.id);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Custom emoji :${params.emojiName}: deactivated ✅`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Unknown action: ${params.action}`,
+                },
+              ],
+            };
+        }
+      },
+    });
+
   },
 };
 

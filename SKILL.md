@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Six tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
+Seven tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -102,11 +102,8 @@ Create, list, edit, or delete scheduled messages. Actions:
 - Failed scheduled messages (shown with ❌) can be rescheduled by editing with a new `scheduledAt`
 - Use `delete` to cancel a scheduled message before it is sent
 
-## Formatting (Zulip Markdown)
-
 ### `zulip_user_groups`
 Manage user groups. User groups can be @mentioned with `@*group_name*`. Actions:
-
 | Action | Required params | Description |
 |---|---|---|
 | `list` | — | List all user groups (excludes system groups) |
@@ -116,12 +113,29 @@ Manage user groups. User groups can be @mentioned with `@*group_name*`. Actions:
 | `members` | `groupId` | List member user IDs of a group |
 | `add_members` | `groupId`, `members` | Add users to a group |
 | `remove_members` | `groupId`, `members` | Remove users from a group |
-
 **Tips**:
 - Use `list` to find group IDs — you need the numeric `groupId` for most actions
 - The `members` param is an array of numeric user IDs, e.g. `[12345, 67890]`
 - System groups (built-in Zulip groups) are excluded from `list` output for clarity
 - Use `zulip_users` → `list` to find user IDs before adding members
+
+### `zulip_custom_emoji`
+List, upload, or deactivate custom emoji in the Zulip organization. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `list` | — | List all active custom emoji (use `includeDeactivated` to show all) |
+| `upload` | `emojiName`, `imageUrl` | Upload a new custom emoji from an image URL |
+| `deactivate` | `emojiName` | Deactivate (soft-delete) a custom emoji |
+
+**Tips**:
+- `emojiName` must be lowercase and contain only alphanumeric characters and underscores (e.g. `party_parrot`, `thumbs_up_green`)
+- `imageUrl` must be a publicly accessible URL to a PNG, GIF, JPEG, or WebP image
+- Recommended image size: under 256KB, ideally square
+- Deactivated emoji are soft-deleted — they can still appear in old messages but cannot be used in new ones
+- Use `list` with `includeDeactivated: true` to see all emoji including deactivated ones
+
+## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:
 
