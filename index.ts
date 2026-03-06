@@ -59,6 +59,12 @@ import {
   listZulipAlertWords,
   addZulipAlertWords,
   removeZulipAlertWords,
+  updateZulipUserTopic,
+  TOPIC_VISIBILITY_POLICIES,
+  TOPIC_VISIBILITY_LABELS,
+  listZulipMutedUsers,
+  muteZulipUser,
+  unmuteZulipUser,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -3565,6 +3571,230 @@ const plugin = {
       },
     });
 
+
+    api.registerTool({
+      name: "zulip_user_topics",
+      description:
+        "Manage personal topic visibility preferences in Zulip: mute, unmute, follow, or reset topics. " +
+        "Also manage muted users to hide their messages. " +
+        "Use to mute noisy topics, follow important topics for extra notifications, " +
+        "unmute specific topics in muted streams, or mute/unmute users.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: [
+              "mute_topic",
+              "unmute_topic",
+              "follow_topic",
+              "reset_topic",
+              "list_muted_users",
+              "mute_user",
+              "unmute_user",
+            ],
+            description:
+              "Action to perform: " +
+              "'mute_topic' silences notifications for a topic, " +
+              "'unmute_topic' unmutes a topic (useful in muted streams), " +
+              "'follow_topic' enables extra notifications for all messages in a topic, " +
+              "'reset_topic' removes any visibility policy (restores default behavior), " +
+              "'list_muted_users' shows all users you have muted, " +
+              "'mute_user' mutes a user (their messages are auto-read and hidden), " +
+              "'unmute_user' unmutes a previously muted user.",
+          },
+          streamName: {
+            type: "string",
+            description:
+              "Stream name where the topic lives (required for topic actions: mute_topic/unmute_topic/follow_topic/reset_topic).",
+          },
+          topic: {
+            type: "string",
+            description:
+              "Topic name to modify the visibility policy for (required for topic actions).",
+          },
+          userId: {
+            type: "number",
+            description:
+              "User ID to mute or unmute (required for mute_user/unmute_user). " +
+              "Use zulip_users to find user IDs.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "mute_topic":
+          case "unmute_topic":
+          case "follow_topic":
+          case "reset_topic": {
+            if (!params.streamName) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: streamName is required for ${params.action}.`,
+                  },
+                ],
+              };
+            }
+            if (!params.topic) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: topic is required for ${params.action}.`,
+                  },
+                ],
+              };
+            }
+
+            // Resolve stream name to ID
+            const stream =
+              (await listZulipSubscriptions(client)).find(
+                (s) =>
+                  s.name.toLowerCase() === params.streamName.toLowerCase(),
+              ) ??
+              (await listZulipStreams(client)).find(
+                (s) =>
+                  s.name.toLowerCase() === params.streamName.toLowerCase(),
+              );
+
+            if (!stream) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: stream "${params.streamName}" not found.`,
+                  },
+                ],
+              };
+            }
+
+            const policyMap: Record<string, number> = {
+              mute_topic: TOPIC_VISIBILITY_POLICIES.muted,
+              unmute_topic: TOPIC_VISIBILITY_POLICIES.unmuted,
+              follow_topic: TOPIC_VISIBILITY_POLICIES.followed,
+              reset_topic: TOPIC_VISIBILITY_POLICIES.none,
+            };
+
+            const policy = policyMap[params.action] as 0 | 1 | 2 | 3;
+            const policyLabel = TOPIC_VISIBILITY_LABELS[policy];
+
+            await updateZulipUserTopic(client, {
+              streamId: stream.stream_id,
+              topic: params.topic,
+              visibilityPolicy: policy,
+            });
+
+            const actionLabels: Record<string, string> = {
+              mute_topic: "Muted",
+              unmute_topic: "Unmuted",
+              follow_topic: "Following",
+              reset_topic: "Reset visibility for",
+            };
+            const actionLabel = actionLabels[params.action];
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `${actionLabel} topic: #${params.streamName} > ${params.topic} ` +
+                    `(policy: ${policyLabel}) \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "list_muted_users": {
+            const mutedUsers = await listZulipMutedUsers(client);
+            if (mutedUsers.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "No muted users." },
+                ],
+              };
+            }
+            const lines = mutedUsers.map((mu) => {
+              const mutedAt = new Date(mu.timestamp * 1000).toISOString();
+              return `- User ID: ${mu.id} (muted at: ${mutedAt})`;
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `${mutedUsers.length} muted user(s):\n${lines.join("\n")}\n\n` +
+                    `Use zulip_users \u2192 get to look up user details by ID.`,
+                },
+              ],
+            };
+          }
+
+          case "mute_user": {
+            if (!params.userId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: userId is required for mute_user.",
+                  },
+                ],
+              };
+            }
+            await muteZulipUser(client, params.userId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `User ${params.userId} muted \u2705\n` +
+                    `Their messages will be automatically marked as read and hidden.`,
+                },
+              ],
+            };
+          }
+
+          case "unmute_user": {
+            if (!params.userId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: userId is required for unmute_user.",
+                  },
+                ],
+              };
+            }
+            await unmuteZulipUser(client, params.userId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `User ${params.userId} unmuted \u2705`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
   },
 };
 
