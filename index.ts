@@ -647,6 +647,36 @@ const plugin = {
             description:
               "Maximum number of messages to return (for search, default: 20, max: 100)",
           },
+          anchor: {
+            type: "string",
+            description:
+              "Message ID or special value to anchor the search (for search). " +
+              "Use a numeric message ID to fetch messages around that point, " +
+              "'newest' (default) to start from the most recent, " +
+              "'oldest' to start from the earliest, " +
+              "or 'first_unread' to start from the first unread message. " +
+              "Combine with 'before'/'after' for pagination.",
+          },
+          before: {
+            type: "number",
+            description:
+              "Number of messages to fetch before the anchor (for search). " +
+              "Default: equal to 'limit' when anchor is 'newest' or a message ID, 0 when anchor is 'oldest'. " +
+              "Use with 'anchor' to paginate backwards through message history.",
+          },
+          after: {
+            type: "number",
+            description:
+              "Number of messages to fetch after the anchor (for search). " +
+              "Default: 0 when anchor is 'newest', equal to 'limit' when anchor is 'oldest'. " +
+              "Use with 'anchor' to paginate forwards through message history.",
+          },
+          includeAnchor: {
+            type: "boolean",
+            description:
+              "Whether to include the anchor message in results (for search, default: true when using a message ID anchor). " +
+              "Set to false when paginating to avoid re-fetching the last seen message.",
+          },
           content: {
             type: "string",
             description: "New message content (for edit)",
@@ -710,11 +740,54 @@ const plugin = {
             }
 
             const limit = Math.min(Math.max(params.limit ?? 20, 1), 100);
+
+            // Resolve anchor — default to "newest" for backwards compat
+            const rawAnchor = params.anchor?.toString().trim() ?? "newest";
+            const anchor: string | number =
+              rawAnchor === "newest" || rawAnchor === "oldest" || rawAnchor === "first_unread"
+                ? rawAnchor
+                : Number(rawAnchor) || "newest";
+
+            // Resolve numBefore / numAfter based on anchor direction
+            let numBefore: number;
+            let numAfter: number;
+            if (params.before !== undefined || params.after !== undefined) {
+              const rawBefore = Math.min(Math.max(params.before ?? 0, 0), 100);
+              const rawAfter = Math.min(Math.max(params.after ?? 0, 0), 100);
+              const totalRequested = rawBefore + rawAfter;
+              // Enforce total does not exceed limit to avoid surprising response sizes
+              if (totalRequested <= limit) {
+                numBefore = rawBefore;
+                numAfter = rawAfter;
+              } else {
+                // Proportionally scale down to fit within limit
+                const scale = limit / totalRequested;
+                numBefore = Math.floor(rawBefore * scale);
+                numAfter = Math.floor(rawAfter * scale);
+                const remaining = limit - (numBefore + numAfter);
+                if (remaining > 0) {
+                  if (rawBefore >= rawAfter) {
+                    numBefore += remaining;
+                  } else {
+                    numAfter += remaining;
+                  }
+                }
+              }
+            } else if (anchor === "oldest") {
+              numBefore = 0;
+              numAfter = limit;
+            } else {
+              // "newest", "first_unread", or a message ID
+              numBefore = limit;
+              numAfter = 0;
+            }
+
             const result = await getZulipMessages(client, {
-              anchor: "newest",
-              numBefore: limit,
-              numAfter: 0,
+              anchor,
+              numBefore,
+              numAfter,
               narrow: narrow.length > 0 ? narrow : undefined,
+              includeAnchor: params.includeAnchor,
             });
 
             const messages = result.messages;
@@ -727,11 +800,39 @@ const plugin = {
             }
 
             const lines = messages.map((m) => formatMessageDetails(m));
+
+            // Build pagination info for the agent
+            const paginationParts: string[] = [];
+            if (result.found_oldest) {
+              paginationParts.push("⬆ Reached oldest message");
+            }
+            if (result.found_newest) {
+              paginationParts.push("⬇ Reached newest message");
+            }
+            if (messages.length > 0) {
+              const oldestMsg = messages[0];
+              const newestMsg = messages[messages.length - 1];
+              if (!result.found_oldest) {
+                paginationParts.push(
+                  `To load older: use anchor="${oldestMsg.id}", before=${limit}, after=0, includeAnchor=false`,
+                );
+              }
+              if (!result.found_newest) {
+                paginationParts.push(
+                  `To load newer: use anchor="${newestMsg.id}", before=0, after=${limit}, includeAnchor=false`,
+                );
+              }
+            }
+            const paginationInfo =
+              paginationParts.length > 0
+                ? `\n\n---\n📄 **Pagination**: ${paginationParts.join(" | ")}`
+                : "";
+
             return {
               content: [
                 {
                   type: "text",
-                  text: `${messages.length} message(s) found:\n\n${lines.join("\n\n---\n\n")}`,
+                  text: `${messages.length} message(s) found:\n\n${lines.join("\n\n---\n\n")}${paginationInfo}`,
                 },
               ],
             };

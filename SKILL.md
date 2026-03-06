@@ -71,9 +71,23 @@ Search, fetch, edit, delete messages and manage emoji reactions. Actions:
 - `query` — free-text search (supports Zulip search operators)
 - `limit` — max results (default: 20, max: 100)
 
+**Pagination parameters** (for search, all optional):
+- `anchor` — message ID or `"newest"` (default) / `"oldest"` / `"first_unread"` to set the reference point
+- `before` — number of messages to fetch before the anchor (default: `limit` when anchor is `"newest"`, `"first_unread"`, or a message ID; 0 when `"oldest"`)
+- `after` — number of messages to fetch after the anchor (default: 0 when anchor is `"newest"`, `"first_unread"`, or a message ID; `limit` when `"oldest"`)
+- `includeAnchor` — whether to include the anchor message itself (default: true; set to false when paginating to avoid duplicates)
+
+**Pagination examples**:
+- **Get the 20 most recent messages** (default): just use `search` with filters — no pagination params needed
+- **Get the 20 oldest messages**: `anchor="oldest"` (before/after are auto-set)
+- **Page backwards from a message**: `anchor="<messageId>", before=20, after=0, includeAnchor=false`
+- **Page forwards from a message**: `anchor="<messageId>", before=0, after=20, includeAnchor=false`
+- The response includes pagination hints with the IDs needed to fetch the next/previous page
+
 **Tips**:
 - Use `search` with `streamName` + `topic` to get recent message history for a conversation
 - Use `search` with `query` for full-text search across all accessible messages
+- Pagination info is included in search results showing whether older/newer messages exist and how to fetch them
 - `edit` and `delete` only work on messages the bot has permission to modify (typically its own messages)
 - When editing a topic, use `propagateMode` to control how the rename applies: `change_one` (default), `change_later`, or `change_all`
 - `emojiName` should be without colons, e.g. `thumbs_up`, `check`, `eyes`, `tada`
