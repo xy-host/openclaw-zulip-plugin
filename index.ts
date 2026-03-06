@@ -67,6 +67,8 @@ import {
   listZulipMutedUsers,
   muteZulipUser,
   unmuteZulipUser,
+  updateZulipSubscriptionProperties,
+  type ZulipSubscriptionProperty,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -4080,6 +4082,315 @@ const plugin = {
                 {
                   type: "text",
                   text: `User ${params.userId} unmuted \u2705`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_stream_settings",
+      description:
+        "View and update per-stream subscription settings for the bot user. " +
+        "Use to pin/unpin streams, mute/unmute entire streams, change stream colors, " +
+        "or configure per-stream notification overrides (desktop, push, email, audible, wildcard mentions). " +
+        "These settings are personal to the bot and do not affect other users.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["get", "pin", "unpin", "mute", "unmute", "set_color", "set_notifications"],
+            description:
+              "Action to perform: " +
+              "'get' returns the current subscription settings for a stream, " +
+              "'pin' pins the stream to the top of the sidebar, " +
+              "'unpin' removes the pin, " +
+              "'mute' mutes the stream to minimize notifications (topic-level overrides and mentions may still notify), " +
+              "'unmute' unmutes the stream, " +
+              "'set_color' changes the stream's sidebar color, " +
+              "'set_notifications' configures per-stream notification overrides.",
+          },
+          streamName: {
+            type: "string",
+            description:
+              "Stream name to operate on (required for all actions). " +
+              "Use the plain stream name without # or ** formatting.",
+          },
+          color: {
+            type: "string",
+            description:
+              "Hex color code for the stream (for set_color action), e.g. '#c6c6ff', '#ff0000'. " +
+              "Must include the '#' prefix.",
+          },
+          desktopNotifications: {
+            type: ["boolean", "null"],
+            description:
+              "Override desktop notifications for this stream (for set_notifications). " +
+              "true = always notify, false = never notify, null = use global default.",
+          },
+          pushNotifications: {
+            type: ["boolean", "null"],
+            description:
+              "Override push/mobile notifications for this stream (for set_notifications). " +
+              "true = always notify, false = never notify, null = use global default.",
+          },
+          emailNotifications: {
+            type: ["boolean", "null"],
+            description:
+              "Override email notifications for this stream (for set_notifications). " +
+              "true = always notify, false = never notify, null = use global default.",
+          },
+          audibleNotifications: {
+            type: ["boolean", "null"],
+            description:
+              "Override audible notifications for this stream (for set_notifications). " +
+              "true = always play sound, false = never play sound, null = use global default.",
+          },
+          wildcardMentionsNotify: {
+            type: ["boolean", "null"],
+            description:
+              "Override wildcard mention (@all/@everyone) notifications for this stream (for set_notifications). " +
+              "true = always notify, false = never notify, null = use global default.",
+          },
+        },
+        required: ["action", "streamName"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        if (!params.streamName) {
+          return {
+            content: [
+              { type: "text", text: "Error: streamName is required." },
+            ],
+          };
+        }
+
+        // Look up the stream in subscriptions to get stream_id and current settings
+        const subs = await listZulipSubscriptions(client);
+        const sub = subs.find(
+          (s) => s.name.toLowerCase() === params.streamName.toLowerCase(),
+        );
+        if (!sub) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: not subscribed to stream "${params.streamName}". ` +
+                  `Use zulip_streams → join to subscribe first.`,
+              },
+            ],
+          };
+        }
+
+        const streamId = sub.stream_id;
+
+        switch (params.action) {
+          case "get": {
+            const colorDisplay = sub.color ?? "(default)";
+            const pinned = sub.pin_to_top === true;
+            const muted = sub.is_muted === true;
+
+            const formatNotif = (val: unknown): string => {
+              if (val === true) return "On";
+              if (val === false) return "Off";
+              return "Global default";
+            };
+
+            const lines = [
+              `**Stream settings for #${sub.name}** (id:${streamId})`,
+              `- Color: ${colorDisplay}`,
+              `- Pinned: ${pinned ? "Yes 📌" : "No"}`,
+              `- Muted: ${muted ? "Yes 🔇" : "No"}`,
+              `- Desktop notifications: ${formatNotif(sub.desktop_notifications)}`,
+              `- Push notifications: ${formatNotif(sub.push_notifications)}`,
+              `- Email notifications: ${formatNotif(sub.email_notifications)}`,
+              `- Audible notifications: ${formatNotif(sub.audible_notifications)}`,
+              `- Wildcard mentions notify: ${formatNotif(sub.wildcard_mentions_notify)}`,
+            ];
+            return {
+              content: [{ type: "text", text: lines.join("\n") }],
+            };
+          }
+
+          case "pin": {
+            await updateZulipSubscriptionProperties(client, [
+              { stream_id: streamId, property: "pin_to_top", value: true },
+            ]);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Stream #${params.streamName} pinned to top 📌 ✅`,
+                },
+              ],
+            };
+          }
+
+          case "unpin": {
+            await updateZulipSubscriptionProperties(client, [
+              { stream_id: streamId, property: "pin_to_top", value: false },
+            ]);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Stream #${params.streamName} unpinned ✅`,
+                },
+              ],
+            };
+          }
+
+          case "mute": {
+            await updateZulipSubscriptionProperties(client, [
+              { stream_id: streamId, property: "is_muted", value: true },
+            ]);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Stream #${params.streamName} muted 🔇 ✅\n` +
+                    `This stream is muted; notifications are suppressed unless overridden by mentions or topic-level settings.`,
+                },
+              ],
+            };
+          }
+
+          case "unmute": {
+            await updateZulipSubscriptionProperties(client, [
+              { stream_id: streamId, property: "is_muted", value: false },
+            ]);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Stream #${params.streamName} unmuted ✅`,
+                },
+              ],
+            };
+          }
+
+          case "set_color": {
+            if (!params.color) {
+              return {
+                content: [
+                  { type: "text", text: "Error: color is required for set_color (e.g. '#c6c6ff')." },
+                ],
+              };
+            }
+            // Validate hex color format
+            const colorRegex = /^#[0-9a-fA-F]{6}$/;
+            if (!colorRegex.test(params.color)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: color must be a valid 6-digit hex code with # prefix (e.g. '#c6c6ff').",
+                  },
+                ],
+              };
+            }
+            await updateZulipSubscriptionProperties(client, [
+              { stream_id: streamId, property: "color", value: params.color },
+            ]);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Stream #${params.streamName} color set to ${params.color} 🎨 ✅`,
+                },
+              ],
+            };
+          }
+
+          case "set_notifications": {
+            const properties: ZulipSubscriptionProperty[] = [];
+
+            if (params.desktopNotifications !== undefined) {
+              properties.push({
+                stream_id: streamId,
+                property: "desktop_notifications",
+                value: params.desktopNotifications,
+              });
+            }
+            if (params.pushNotifications !== undefined) {
+              properties.push({
+                stream_id: streamId,
+                property: "push_notifications",
+                value: params.pushNotifications,
+              });
+            }
+            if (params.emailNotifications !== undefined) {
+              properties.push({
+                stream_id: streamId,
+                property: "email_notifications",
+                value: params.emailNotifications,
+              });
+            }
+            if (params.audibleNotifications !== undefined) {
+              properties.push({
+                stream_id: streamId,
+                property: "audible_notifications",
+                value: params.audibleNotifications,
+              });
+            }
+            if (params.wildcardMentionsNotify !== undefined) {
+              properties.push({
+                stream_id: streamId,
+                property: "wildcard_mentions_notify",
+                value: params.wildcardMentionsNotify,
+              });
+            }
+
+            if (properties.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: provide at least one notification setting to update: " +
+                      "desktopNotifications, pushNotifications, emailNotifications, " +
+                      "audibleNotifications, or wildcardMentionsNotify. " +
+                      "Use true to enable, false to disable, or null to reset to global default.",
+                  },
+                ],
+              };
+            }
+
+            await updateZulipSubscriptionProperties(client, properties);
+
+            const formatVal = (val: unknown): string => {
+              if (val === true) return "On";
+              if (val === false) return "Off";
+              return "Global default";
+            };
+
+            const changes = properties.map(
+              (p) => `- ${p.property.replace(/_/g, " ")}: ${formatVal(p.value)}`,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Notification settings updated for #${params.streamName} ✅\n` +
+                    changes.join("\n"),
                 },
               ],
             };
