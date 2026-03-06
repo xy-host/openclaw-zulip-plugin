@@ -13,12 +13,15 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 The following tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
 
 ### `zulip_send`
-Send a message to a stream or DM.
+Send a message to a stream, 1:1 DM, or group DM (huddle).
 
 - **Stream message**: provide `streamName`, `topic`, and `content`
-- **DM**: provide `userId` and `content`
+- **1:1 DM**: provide `userId` and `content`
+- **Group DM (huddle)**: provide `userIds` (array of at least 2 user IDs) and `content`
 - `content` must not be empty
+- `streamName`, `userId`, and `userIds` are mutually exclusive — provide exactly one
 - If `topic` is omitted for stream messages, it defaults to "(no topic)" — always provide a topic
+- Use `zulip_users` → `list` or `get_by_email` to find user IDs for DMs
 
 ### `zulip_streams`
 Manage streams. Actions:
@@ -400,8 +403,9 @@ When the agent receives a message from a Zulip stream:
 
 ## Direct Messages
 
-- Use `zulip_send` with `userId` (numeric Zulip user ID, as a string)
-- You need the user's Zulip ID — use `zulip_users` → `list` or `get_by_email` to find IDs
+- **1:1 DM**: Use `zulip_send` with `userId` (numeric Zulip user ID, as a string)
+- **Group DM (huddle)**: Use `zulip_send` with `userIds` (array of numeric user IDs, at least 2)
+- You need the users' Zulip IDs — use `zulip_users` → `list` or `get_by_email` to find IDs
 
 ## Multi-Account
 
