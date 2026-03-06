@@ -373,14 +373,14 @@ const plugin = {
           userId: {
             type: "string",
             description:
-              "User ID for a 1:1 direct message. Mutually exclusive with userIds.",
+              "User ID for a 1:1 direct message. Mutually exclusive with userIds and streamName.",
           },
           userIds: {
             type: "array",
             items: { type: "number" },
             description:
-              "Array of user IDs for a group DM (huddle). Must contain at least 2 user IDs. " +
-              "Mutually exclusive with userId. Use zulip_users to find user IDs.",
+              "Array of user IDs for a group DM (huddle). Must contain at least 2 distinct user IDs. " +
+              "Mutually exclusive with userId and streamName. Use zulip_users to find user IDs.",
           },
           content: {
             type: "string",
@@ -445,23 +445,46 @@ const plugin = {
               ],
             };
           }
+          // Deduplicate to ensure we have at least 2 distinct recipients
+          const uniqueIds = [...new Set(params.userIds as number[])];
+          if (uniqueIds.length < 2) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Error: userIds must contain at least 2 distinct user IDs for a group DM. For 1:1 DMs, use userId instead.",
+                },
+              ],
+            };
+          }
           const result = await sendZulipApiMessage(client, {
             type: "direct",
-            to: JSON.stringify(params.userIds),
+            to: JSON.stringify(uniqueIds),
             content: params.content,
           });
           return {
             content: [
               {
                 type: "text",
-                text: `Sent group DM to users [${params.userIds.join(", ")}] (id:${result.id}) ✅`,
+                text: `Sent group DM to users [${uniqueIds.join(", ")}] (id:${result.id}) ✅`,
               },
             ],
           };
         } else if (params.userId) {
+          const parsedUserId = Number(params.userId);
+          if (!Number.isFinite(parsedUserId) || parsedUserId <= 0) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Error: userId must be a valid positive numeric user ID.",
+                },
+              ],
+            };
+          }
           const result = await sendZulipApiMessage(client, {
             type: "direct",
-            to: JSON.stringify([Number(params.userId)]),
+            to: JSON.stringify([parsedUserId]),
             content: params.content,
           });
           return {
