@@ -257,18 +257,27 @@ export async function listZulipSubscriptions(
   return data.subscriptions ?? [];
 }
 
-export async function subscribeZulipStream(
+/**
+ * Shared helper for subscribing users to a stream.
+ * When principals is omitted, subscribes the bot itself.
+ * When principals is provided, subscribes the specified users.
+ */
+async function subscribeToStream(
   client: ZulipClient,
   params: {
     name: string;
     description?: string;
     isPrivate?: boolean;
+    principals?: number[];
   },
 ): Promise<{ already_subscribed: Record<string, string[]>; subscribed: Record<string, string[]> }> {
   const body = new URLSearchParams();
   const sub: Record<string, string> = { name: params.name };
   if (params.description) sub.description = params.description;
   body.set("subscriptions", JSON.stringify([sub]));
+  if (params.principals && params.principals.length > 0) {
+    body.set("principals", JSON.stringify(params.principals));
+  }
   if (params.isPrivate) body.set("invite_only", "true");
   const data = await client.request<{
     already_subscribed: Record<string, string[]>;
@@ -278,6 +287,17 @@ export async function subscribeZulipStream(
     body: body.toString(),
   });
   return data;
+}
+
+export async function subscribeZulipStream(
+  client: ZulipClient,
+  params: {
+    name: string;
+    description?: string;
+    isPrivate?: boolean;
+  },
+): Promise<{ already_subscribed: Record<string, string[]>; subscribed: Record<string, string[]> }> {
+  return subscribeToStream(client, params);
 }
 
 export async function unsubscribeZulipStream(
@@ -307,20 +327,12 @@ export async function subscribeUsersToZulipStream(
     isPrivate?: boolean;
   },
 ): Promise<{ already_subscribed: Record<string, string[]>; subscribed: Record<string, string[]> }> {
-  const body = new URLSearchParams();
-  const sub: Record<string, string> = { name: params.name };
-  if (params.description) sub.description = params.description;
-  body.set("subscriptions", JSON.stringify([sub]));
-  body.set("principals", JSON.stringify(params.userIds));
-  if (params.isPrivate) body.set("invite_only", "true");
-  const data = await client.request<{
-    already_subscribed: Record<string, string[]>;
-    subscribed: Record<string, string[]>;
-  }>("/users/me/subscriptions", {
-    method: "POST",
-    body: body.toString(),
+  return subscribeToStream(client, {
+    name: params.name,
+    description: params.description,
+    isPrivate: params.isPrivate,
+    principals: params.userIds,
   });
-  return data;
 }
 
 /**

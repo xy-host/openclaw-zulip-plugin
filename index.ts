@@ -178,7 +178,7 @@ const plugin = {
           },
           isPrivate: {
             type: "boolean",
-            description: "Whether the stream is private (for create/update)",
+            description: "Whether the stream is private (for create/update/subscribe_users)",
           },
           userIds: {
             type: "array",
@@ -365,21 +365,26 @@ const plugin = {
               };
             }
             const invalidIds = params.userIds.filter(
-              (id: unknown) => typeof id !== "number" || !Number.isFinite(id) || (id as number) <= 0,
+              (id: unknown) =>
+                typeof id !== "number" ||
+                !Number.isFinite(id) ||
+                !Number.isInteger(id) ||
+                (id as number) <= 0,
             );
             if (invalidIds.length > 0) {
               return {
                 content: [
                   {
                     type: "text",
-                    text: `Error: invalid user ID(s): ${JSON.stringify(invalidIds)}. All IDs must be positive numbers.`,
+                    text: `Error: invalid user ID(s): ${JSON.stringify(invalidIds)}. All IDs must be positive integers.`,
                   },
                 ],
               };
             }
+            const uniqueUserIds = [...new Set(params.userIds as number[])];
             const subResult = await subscribeUsersToZulipStream(client, {
               name: params.name,
-              userIds: params.userIds,
+              userIds: uniqueUserIds,
               description: params.description,
               isPrivate: params.isPrivate,
             });
@@ -419,24 +424,29 @@ const plugin = {
               };
             }
             const invalidIds = params.userIds.filter(
-              (id: unknown) => typeof id !== "number" || !Number.isFinite(id) || (id as number) <= 0,
+              (id: unknown) =>
+                typeof id !== "number" ||
+                !Number.isFinite(id) ||
+                !Number.isInteger(id) ||
+                (id as number) <= 0,
             );
             if (invalidIds.length > 0) {
               return {
                 content: [
                   {
                     type: "text",
-                    text: `Error: invalid user ID(s): ${JSON.stringify(invalidIds)}. All IDs must be positive numbers.`,
+                    text: `Error: invalid user ID(s): ${JSON.stringify(invalidIds)}. All IDs must be positive integers.`,
                   },
                 ],
               };
             }
-            await unsubscribeUsersFromZulipStream(client, params.name, params.userIds);
+            const uniqueUserIds = [...new Set(params.userIds as number[])];
+            await unsubscribeUsersFromZulipStream(client, params.name, uniqueUserIds);
             return {
               content: [
                 {
                   type: "text",
-                  text: `Unsubscribed ${params.userIds.length} user(s) from **${params.name}** ✅`,
+                  text: `Unsubscribed ${uniqueUserIds.length} user(s) from **${params.name}** ✅`,
                 },
               ],
             };
