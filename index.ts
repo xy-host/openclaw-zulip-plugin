@@ -2579,7 +2579,7 @@ const plugin = {
               };
             }
             const status = await getZulipUserStatus(client, params.userId);
-            if (!status || (!status.status_text && !status.emoji_name)) {
+            if (!status.status_text && !status.emoji_name) {
               return {
                 content: [
                   {
