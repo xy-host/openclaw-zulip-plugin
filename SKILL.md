@@ -332,6 +332,34 @@ List, add, or remove alert words for the bot user. Alert words trigger notificat
 - Removing a word that doesn't exist is also a no-op (no error)
 
 
+
+### `zulip_stream_settings`
+View and update per-stream subscription settings. These settings are personal to the bot. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `get` | `streamName` | View current subscription settings (color, pinned, muted, notifications) |
+| `pin` | `streamName` | Pin a stream to the top of the sidebar |
+| `unpin` | `streamName` | Remove the pin from a stream |
+| `mute` | `streamName` | Mute the entire stream (silences all notifications) |
+| `unmute` | `streamName` | Unmute a muted stream |
+| `set_color` | `streamName`, `color` | Change the stream's sidebar color (hex code like `#c6c6ff`) |
+| `set_notifications` | `streamName` + notification params | Configure per-stream notification overrides |
+
+**Notification parameters** (for set_notifications, all optional — include at least one):
+- `desktopNotifications` — `true` to always notify, `false` to never, `null` to use global default
+- `pushNotifications` — same as above for push/mobile notifications
+- `emailNotifications` — same as above for email notifications
+- `audibleNotifications` — same as above for audible/sound notifications
+- `wildcardMentionsNotify` — same as above for @all/@everyone mention notifications
+
+**Tips**:
+- Use `get` to see the current settings before making changes
+- Pin important streams so they always appear at the top of the sidebar
+- Muting a stream silences all notifications — use `zulip_user_preferences` → `unmute_topic` to selectively get notifications for specific topics within a muted stream
+- Notification overrides only apply to this stream — `null` resets to the global default
+- The bot must be subscribed to the stream — use `zulip_streams` → `join` first if needed
+- Color must be a 6-digit hex code with `#` prefix, e.g. `#ff6600`, `#c6c6ff`
 ### `zulip_user_preferences`
 Manage personal preferences: topic visibility and user muting. Actions:
 

@@ -1432,3 +1432,39 @@ export async function unmuteZulipUser(
     { method: "DELETE" },
   );
 }
+
+// ── Stream Subscription Properties ──
+
+export type ZulipStreamNotificationSetting = boolean | null;
+
+export type ZulipSubscriptionProperty = {
+  stream_id: number;
+  property: string;
+  value: unknown;
+};
+
+/**
+ * Update per-stream subscription properties for the current user.
+ * Each entry specifies a stream_id, property name, and new value.
+ *
+ * Supported properties:
+ * - color (string): hex color like "#c6c6ff"
+ * - is_muted (boolean): mute/unmute the entire stream
+ * - pin_to_top (boolean): pin stream to top of sidebar
+ * - desktop_notifications (boolean | null): per-stream desktop notification override (null = use global)
+ * - audible_notifications (boolean | null): per-stream audible notification override (null = use global)
+ * - push_notifications (boolean | null): per-stream push notification override (null = use global)
+ * - email_notifications (boolean | null): per-stream email notification override (null = use global)
+ * - wildcard_mentions_notify (boolean | null): per-stream wildcard mention (@all/@everyone) override (null = use global)
+ */
+export async function updateZulipSubscriptionProperties(
+  client: ZulipClient,
+  properties: ZulipSubscriptionProperty[],
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("subscription_data", JSON.stringify(properties));
+  await client.request<{ result: string }>("/users/me/subscriptions/properties", {
+    method: "POST",
+    body: body.toString(),
+  });
+}
