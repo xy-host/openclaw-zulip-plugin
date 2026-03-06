@@ -65,7 +65,7 @@ Look up and manage users. Actions:
 - By default, `list` excludes bots and deactivated users — set `includeBots: true` or `includeDeactivated: true` to include them
 
 ### `zulip_messages`
-Search, fetch, edit, delete messages and manage emoji reactions. Actions:
+Search, fetch, edit, delete messages, manage emoji reactions, and view edit history. Actions:
 
 | Action | Required params | Description |
 |---|---|---|
@@ -75,6 +75,7 @@ Search, fetch, edit, delete messages and manage emoji reactions. Actions:
 | `delete` | `messageId` | Delete a message the bot sent |
 | `add_reaction` | `messageId`, `emojiName` | Add an emoji reaction to a message |
 | `remove_reaction` | `messageId`, `emojiName` | Remove an emoji reaction from a message |
+| `history` | `messageId` | View the edit history of a message (all past versions and changes) |
 
 **Search filters** (all optional, combine as needed):
 - `streamName` — filter by stream
@@ -96,6 +97,12 @@ Search, fetch, edit, delete messages and manage emoji reactions. Actions:
 - **Page forwards from a message**: `anchor="<messageId>", before=0, after=20, includeAnchor=false`
 - The response includes pagination hints with the IDs needed to fetch the next/previous page
 
+**History action**:
+- Returns all past versions of a message in reverse chronological order
+- The first entry is the original message; subsequent entries show each edit
+- Each entry includes timestamps, the editor's user ID, and what changed (content, topic, stream)
+- Requires the organization to have edit history enabled (most Zulip servers have this on by default)
+
 **Tips**:
 - Use `search` with `streamName` + `topic` to get recent message history for a conversation
 - Use `search` with `query` for full-text search across all accessible messages
@@ -104,6 +111,7 @@ Search, fetch, edit, delete messages and manage emoji reactions. Actions:
 - When editing a topic, use `propagateMode` to control how the rename applies: `change_one` (default), `change_later`, or `change_all`
 - `emojiName` should be without colons, e.g. `thumbs_up`, `check`, `eyes`, `tada`
 - Use `get` to fetch full message details including content, sender info, and reactions
+- Use `history` to see all past versions of a message — useful for auditing edits or understanding how a conversation evolved
 
 ### `zulip_scheduled_messages`
 Create, list, edit, or delete scheduled messages. Actions:
