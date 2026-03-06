@@ -4110,26 +4110,39 @@ const plugin = {
             // Apply filter if specified
             const filterPolicy = params.filterPolicy ?? "all";
             const policyFilter: Record<string, number[]> = {
-              muted: [1],
-              unmuted: [2],
-              followed: [3],
-              all: [1, 2, 3],
+              muted: [TOPIC_VISIBILITY_POLICIES.muted],
+              unmuted: [TOPIC_VISIBILITY_POLICIES.unmuted],
+              followed: [TOPIC_VISIBILITY_POLICIES.followed],
+              all: [
+                TOPIC_VISIBILITY_POLICIES.muted,
+                TOPIC_VISIBILITY_POLICIES.unmuted,
+                TOPIC_VISIBILITY_POLICIES.followed,
+              ],
             };
-            const allowedPolicies = policyFilter[filterPolicy] ?? [1, 2, 3];
+            const allowedPolicies = policyFilter[filterPolicy] ?? policyFilter.all;
             const filtered = userTopics.filter((ut) =>
               allowedPolicies.includes(ut.visibility_policy),
             );
 
             if (filtered.length === 0) {
-              const filterNote =
-                filterPolicy !== "all"
-                  ? ` with policy "${filterPolicy}"`
-                  : "";
+              if (filterPolicy !== "all" && userTopics.length > 0) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text:
+                        `No topics with policy "${filterPolicy}" found, ` +
+                        `but there are ${userTopics.length} topic(s) with other custom visibility policies. ` +
+                        `Use filterPolicy="all" to see them all.`,
+                    },
+                  ],
+                };
+              }
               return {
                 content: [
                   {
                     type: "text",
-                    text: `No topics${filterNote} with custom visibility policies found. All topics use default behavior.`,
+                    text: "No topics with custom visibility policies found. All topics use default behavior.",
                   },
                 ],
               };
@@ -4138,13 +4151,35 @@ const plugin = {
             // Resolve stream IDs to names for readability
             let streamMap: Map<number, string> | null = null;
             try {
+              // Collect the set of stream IDs we actually need to resolve
+              const neededStreamIds = new Set<number>();
+              for (const ut of filtered) {
+                if (ut.stream_id != null) {
+                  neededStreamIds.add(ut.stream_id);
+                }
+              }
+
+              // First, resolve from subscriptions (cheaper than listing all streams)
               const subs = await listZulipSubscriptions(client);
-              streamMap = new Map(subs.map((s) => [s.stream_id, s.name]));
-              // Also check all streams in case some topics are in unsubscribed streams
-              const allStreams = await listZulipStreams(client);
-              for (const s of allStreams) {
-                if (!streamMap.has(s.stream_id)) {
+              streamMap = new Map();
+              for (const s of subs) {
+                if (neededStreamIds.has(s.stream_id)) {
                   streamMap.set(s.stream_id, s.name);
+                  neededStreamIds.delete(s.stream_id);
+                }
+              }
+
+              // Only fetch all streams if there are still unresolved IDs
+              if (neededStreamIds.size > 0) {
+                const allStreams = await listZulipStreams(client);
+                for (const s of allStreams) {
+                  if (neededStreamIds.has(s.stream_id)) {
+                    streamMap.set(s.stream_id, s.name);
+                    neededStreamIds.delete(s.stream_id);
+                    if (neededStreamIds.size === 0) {
+                      break;
+                    }
+                  }
                 }
               }
             } catch {
@@ -4161,9 +4196,9 @@ const plugin = {
 
             const sections: string[] = [];
             const policyOrder: Array<[number, string, string]> = [
-              [3, "Followed", "👁️"],
-              [1, "Muted", "🔇"],
-              [2, "Unmuted", "🔔"],
+              [TOPIC_VISIBILITY_POLICIES.followed, "Followed", "👁️"],
+              [TOPIC_VISIBILITY_POLICIES.muted, "Muted", "🔇"],
+              [TOPIC_VISIBILITY_POLICIES.unmuted, "Unmuted", "🔔"],
             ];
 
             for (const [policyNum, label, emoji] of policyOrder) {
