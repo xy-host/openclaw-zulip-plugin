@@ -498,6 +498,7 @@ export async function getZulipMessages(
     numAfter: number;
     narrow?: Array<{ operator: string; operand: string | number }>;
     applyMarkdown?: boolean;
+    includeAnchor?: boolean;
   },
 ): Promise<ZulipGetMessagesResult> {
   const qs = new URLSearchParams();
@@ -508,6 +509,9 @@ export async function getZulipMessages(
     qs.set("narrow", JSON.stringify(params.narrow));
   }
   qs.set("apply_markdown", params.applyMarkdown === true ? "true" : "false");
+  if (params.includeAnchor !== undefined) {
+    qs.set("include_anchor", String(params.includeAnchor));
+  }
   const data = await client.request<ZulipGetMessagesResult & { result: string }>(
     `/messages?${qs.toString()}`,
   );
