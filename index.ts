@@ -71,6 +71,7 @@ import {
   listZulipAttachments,
   deleteZulipAttachment,
   getZulipMessageHistory,
+  listZulipUserTopics,
   type ZulipSubscriptionProperty,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
@@ -3953,10 +3954,10 @@ const plugin = {
     api.registerTool({
       name: "zulip_user_preferences",
       description:
-        "Manage personal preferences in Zulip: topic visibility (mute, unmute, follow, reset) and user muting. " +
-        "Also manage muted users to hide their messages. " +
+        "Manage personal preferences in Zulip: topic visibility (mute, unmute, follow, reset), " +
+        "list all custom topic visibility policies, and manage muted users. " +
         "Use to mute noisy topics, follow important topics for extra notifications, " +
-        "unmute specific topics in muted streams, or mute/unmute users.",
+        "unmute specific topics in muted streams, list all topics with custom visibility, or mute/unmute users.",
       parameters: {
         type: "object",
         properties: {
@@ -3972,6 +3973,7 @@ const plugin = {
               "unmute_topic",
               "follow_topic",
               "reset_topic",
+              "list_visibility_policies",
               "list_muted_users",
               "mute_user",
               "unmute_user",
@@ -3982,6 +3984,7 @@ const plugin = {
               "'unmute_topic' unmutes a topic (useful in muted streams), " +
               "'follow_topic' enables extra notifications for all messages in a topic, " +
               "'reset_topic' removes any visibility policy (restores default behavior), " +
+              "'list_visibility_policies' lists all topics with custom visibility policies (muted, unmuted, followed), " +
               "'list_muted_users' shows all users you have muted, " +
               "'mute_user' mutes a user (their messages are auto-read and hidden), " +
               "'unmute_user' unmutes a previously muted user.",
@@ -3995,6 +3998,14 @@ const plugin = {
             type: "string",
             description:
               "Topic name to modify the visibility policy for (required for topic actions).",
+          },
+          filterPolicy: {
+            type: "string",
+            enum: ["muted", "unmuted", "followed", "all"],
+            description:
+              "Filter topics by visibility policy (for list_visibility_policies). " +
+              "'muted' = only muted topics, 'unmuted' = only unmuted topics, " +
+              "'followed' = only followed topics, 'all' = all custom policies (default).",
           },
           userId: {
             type: "number",
@@ -4088,6 +4099,90 @@ const plugin = {
                   text:
                     `${actionLabel} topic: #${params.streamName} > ${params.topic} ` +
                     `(policy: ${policyLabel}) \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "list_visibility_policies": {
+            const userTopics = await listZulipUserTopics(client);
+
+            // Apply filter if specified
+            const filterPolicy = params.filterPolicy ?? "all";
+            const policyFilter: Record<string, number[]> = {
+              muted: [1],
+              unmuted: [2],
+              followed: [3],
+              all: [1, 2, 3],
+            };
+            const allowedPolicies = policyFilter[filterPolicy] ?? [1, 2, 3];
+            const filtered = userTopics.filter((ut) =>
+              allowedPolicies.includes(ut.visibility_policy),
+            );
+
+            if (filtered.length === 0) {
+              const filterNote =
+                filterPolicy !== "all"
+                  ? ` with policy "${filterPolicy}"`
+                  : "";
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `No topics${filterNote} with custom visibility policies found. All topics use default behavior.`,
+                  },
+                ],
+              };
+            }
+
+            // Resolve stream IDs to names for readability
+            let streamMap: Map<number, string> | null = null;
+            try {
+              const subs = await listZulipSubscriptions(client);
+              streamMap = new Map(subs.map((s) => [s.stream_id, s.name]));
+              // Also check all streams in case some topics are in unsubscribed streams
+              const allStreams = await listZulipStreams(client);
+              for (const s of allStreams) {
+                if (!streamMap.has(s.stream_id)) {
+                  streamMap.set(s.stream_id, s.name);
+                }
+              }
+            } catch {
+              // If stream lookup fails, fall back to stream IDs
+            }
+
+            // Group topics by policy for clearer output
+            const policyGroups: Record<number, typeof filtered> = {};
+            for (const ut of filtered) {
+              const p = ut.visibility_policy;
+              if (!policyGroups[p]) policyGroups[p] = [];
+              policyGroups[p].push(ut);
+            }
+
+            const sections: string[] = [];
+            const policyOrder: Array<[number, string, string]> = [
+              [3, "Followed", "👁️"],
+              [1, "Muted", "🔇"],
+              [2, "Unmuted", "🔔"],
+            ];
+
+            for (const [policyNum, label, emoji] of policyOrder) {
+              const topics = policyGroups[policyNum as number];
+              if (!topics || topics.length === 0) continue;
+              const lines = topics.map((t) => {
+                const streamLabel = streamMap?.get(t.stream_id) ?? `stream_id:${t.stream_id}`;
+                return `  - #${streamLabel} > ${t.topic_name}`;
+              });
+              sections.push(`**${emoji} ${label}** (${topics.length}):\n${lines.join("\n")}`);
+            }
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `${filtered.length} topic(s) with custom visibility policies:\n\n` +
+                    sections.join("\n\n"),
                 },
               ],
             };

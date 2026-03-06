@@ -1394,6 +1394,31 @@ export async function updateZulipUserTopic(
   });
 }
 
+// ── User Topic Visibility Policies (list) ──
+
+export type ZulipUserTopicEntry = {
+  stream_id: number;
+  topic_name: string;
+  visibility_policy: ZulipTopicVisibilityPolicy;
+  last_updated: number;
+};
+
+/**
+ * List all topics for which the current user has set a visibility policy.
+ * Returns topics with policies: muted (1), unmuted (2), or followed (3).
+ * Topics with the default policy (0) are not returned.
+ * Uses GET /user_topics (Zulip 9.0+, feature level 250).
+ */
+export async function listZulipUserTopics(
+  client: ZulipClient,
+): Promise<ZulipUserTopicEntry[]> {
+  const data = await client.request<{
+    user_topics: ZulipUserTopicEntry[];
+    result: string;
+  }>("/user_topics");
+  return data.user_topics ?? [];
+}
+
 // ── Muted Users ──
 
 export type ZulipMutedUser = {
