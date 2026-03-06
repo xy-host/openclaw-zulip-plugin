@@ -1488,19 +1488,27 @@ export type ZulipAttachment = {
   }>;
 };
 
+export type ZulipAttachmentsResult = {
+  attachments: ZulipAttachment[];
+  uploadSpaceUsed: number;
+};
+
 /**
- * List all files uploaded by the current user.
- * Supports cursor-based pagination.
+ * List all files uploaded by the current user and return upload space usage.
+ * Returns both the attachment list and total upload space used (in bytes).
  */
 export async function listZulipAttachments(
   client: ZulipClient,
-): Promise<ZulipAttachment[]> {
+): Promise<ZulipAttachmentsResult> {
   const data = await client.request<{
     attachments: ZulipAttachment[];
     upload_space_used: number;
     result: string;
   }>("/attachments");
-  return data.attachments ?? [];
+  return {
+    attachments: data.attachments ?? [],
+    uploadSpaceUsed: data.upload_space_used ?? 0,
+  };
 }
 
 /**
@@ -1512,21 +1520,7 @@ export async function deleteZulipAttachment(
   attachmentId: number,
 ): Promise<void> {
   await client.request<{ result: string }>(
-    \`/attachments/\${attachmentId}\`,
+    `/attachments/${attachmentId}`,
     { method: "DELETE" },
   );
-}
-
-/**
- * Get the total upload space used by the current user (in bytes).
- */
-export async function getZulipUploadSpace(
-  client: ZulipClient,
-): Promise<{ uploadSpaceUsed: number }> {
-  const data = await client.request<{
-    attachments: unknown[];
-    upload_space_used: number;
-    result: string;
-  }>("/attachments");
-  return { uploadSpaceUsed: data.upload_space_used ?? 0 };
 }

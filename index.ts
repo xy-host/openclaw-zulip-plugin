@@ -70,7 +70,6 @@ import {
   updateZulipSubscriptionProperties,
   listZulipAttachments,
   deleteZulipAttachment,
-  getZulipUploadSpace,
   type ZulipSubscriptionProperty,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
@@ -4446,7 +4445,7 @@ const plugin = {
 
         switch (params.action) {
           case "list": {
-            const attachments = await listZulipAttachments(client);
+            const { attachments } = await listZulipAttachments(client);
             if (attachments.length === 0) {
               return {
                 content: [
@@ -4456,12 +4455,14 @@ const plugin = {
             }
             const lines = attachments.map((a) => {
               const sizeKB = (a.size / 1024).toFixed(1);
+              const sizeMB = (a.size / (1024 * 1024)).toFixed(2);
+              const sizeLabel = a.size >= 1024 * 1024 ? `${sizeMB} MB` : `${sizeKB} KB`;
               const date = new Date(a.create_time * 1000).toISOString();
               const msgCount = a.messages?.length ?? 0;
               const msgInfo = msgCount > 0
                 ? ` (referenced in ${msgCount} message${msgCount > 1 ? "s" : ""})`
                 : " (not referenced in any message)";
-              return `- **[${a.id}]** ${a.name} — ${sizeKB} KB, uploaded ${date}${msgInfo}`;
+              return `- **[${a.id}]** ${a.name} — ${sizeLabel}, uploaded ${date}${msgInfo}`;
             });
             return {
               content: [
@@ -4496,7 +4497,7 @@ const plugin = {
           }
 
           case "usage": {
-            const { uploadSpaceUsed } = await getZulipUploadSpace(client);
+            const { uploadSpaceUsed } = await listZulipAttachments(client);
             const usedMB = (uploadSpaceUsed / (1024 * 1024)).toFixed(2);
             const usedKB = (uploadSpaceUsed / 1024).toFixed(1);
             return {
