@@ -439,7 +439,7 @@ export async function getZulipUser(
   client: ZulipClient,
   userId: number,
 ): Promise<ZulipUser> {
-  const data = await client.request<{ user: ZulipUser }>(`/users/${userId}`);
+  const data = await client.request<{ user: ZulipUser }>();
   return data.user;
 }
 
@@ -1030,4 +1030,88 @@ export async function updateZulipOwnStatus(
     method: "POST",
     body: body.toString(),
   });
+}
+
+// ── Server & Organization Settings ──
+
+export type ZulipServerSettings = {
+  zulip_version: string;
+  zulip_feature_level: number;
+  zulip_merge_base?: string;
+  push_notifications_enabled: boolean;
+  is_incompatible: boolean;
+  realm_name?: string;
+  realm_description?: string;
+  realm_icon?: string;
+  realm_uri?: string;
+};
+
+export async function getZulipServerSettings(
+  client: ZulipClient,
+): Promise<ZulipServerSettings> {
+  const data = await client.request<ZulipServerSettings & { result: string }>(
+    "/server_settings",
+  );
+  return data;
+}
+
+// ── Custom Profile Fields ──
+
+export type ZulipCustomProfileField = {
+  id: number;
+  name: string;
+  type: number;
+  hint: string;
+  order: number;
+  field_data?: string;
+  display_in_profile_summary?: boolean;
+};
+
+/**
+ * Type values:
+ * 1 = Short text, 2 = Long text, 3 = List of options,
+ * 4 = Date picker, 5 = Link, 6 = Person picker,
+ * 7 = External account, 8 = Pronouns
+ */
+const PROFILE_FIELD_TYPE_NAMES: Record<number, string> = {
+  1: "Short text",
+  2: "Long text",
+  3: "List of options",
+  4: "Date picker",
+  5: "Link",
+  6: "Person picker",
+  7: "External account",
+  8: "Pronouns",
+};
+
+export function getProfileFieldTypeName(typeId: number): string {
+  return PROFILE_FIELD_TYPE_NAMES[typeId] ?? `Unknown (${typeId})`;
+}
+
+export async function listZulipCustomProfileFields(
+  client: ZulipClient,
+): Promise<ZulipCustomProfileField[]> {
+  const data = await client.request<{
+    custom_fields: ZulipCustomProfileField[];
+    result: string;
+  }>("/realm/profile_fields");
+  return data.custom_fields ?? [];
+}
+
+// ── User Profile Data ──
+
+export type ZulipUserProfileData = Record<
+  string,
+  { value: string; rendered_value?: string }
+>;
+
+export async function getZulipUserProfileData(
+  client: ZulipClient,
+  userId: number,
+): Promise<ZulipUserProfileData> {
+  const data = await client.request<{
+    user: { profile_data?: ZulipUserProfileData };
+    result: string;
+  }>(`/users/${userId}`);
+  return data.user?.profile_data ?? {};
 }

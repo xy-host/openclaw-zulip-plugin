@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Eleven tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
+Twelve tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -228,6 +228,23 @@ Get or set user status (emoji + text) in Zulip. User status appears next to the 
 - Use `clear` to remove the bot's status text, emoji, and away flag
 - The `emojiName` can be a standard Unicode emoji name or a custom emoji name (use `zulip_custom_emoji` list to find available custom emoji)
 - Status text is limited to 60 characters
+
+
+### `zulip_server_settings`
+Query server/organization info and custom profile fields. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `server_info` | — | Get server version, feature level, and organization metadata |
+| `profile_fields` | — | List custom profile fields configured for the organization |
+| `user_profile` | `userId` | Get a specific user's custom profile data |
+
+**Tips**:
+- Use `server_info` to check the Zulip server version and feature level — useful for knowing which API features are available
+- Use `profile_fields` to discover what custom fields the organization has configured (e.g., Team, Role, Phone, Pronouns)
+- Use `user_profile` with a user ID to read that user's custom profile field values — great for looking up team membership, roles, etc.
+- Fields of type "List of options" (type 3) show their available options in the `profile_fields` output
+- Fields marked with ⭐ are displayed in profile summaries
 
 ## Formatting (Zulip Markdown)
 

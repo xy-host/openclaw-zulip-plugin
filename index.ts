@@ -47,6 +47,10 @@ import {
   removeZulipLinkifier,
   reorderZulipLinkifiers,
   getZulipUserStatus,
+  getZulipServerSettings,
+  listZulipCustomProfileFields,
+  getZulipUserProfileData,
+  getProfileFieldTypeName,
   updateZulipOwnStatus,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
@@ -2658,6 +2662,174 @@ const plugin = {
             return {
               content: [
                 { type: "text", text: "Status cleared ✅" },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_server_settings",
+      description:
+        "Query Zulip server and organization information, list custom profile fields, " +
+        "or get a user's custom profile data. Use to check the server version and feature level, " +
+        "discover organization settings, or retrieve custom profile fields like team, role, " +
+        "phone number, or pronouns for any user.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["server_info", "profile_fields", "user_profile"],
+            description:
+              "Action to perform: 'server_info' returns server version, feature level, " +
+              "and organization metadata; 'profile_fields' lists custom profile fields " +
+              "configured for the organization; 'user_profile' returns a specific user's " +
+              "custom profile data.",
+          },
+          userId: {
+            type: "number",
+            description:
+              "User ID to get custom profile data for (required for 'user_profile' action). " +
+              "Use zulip_users to find user IDs.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "server_info": {
+            const settings = await getZulipServerSettings(client);
+            const lines: string[] = [
+              `**Zulip Server Info**`,
+              `- Version: ${settings.zulip_version}`,
+              `- Feature level: ${settings.zulip_feature_level}`,
+            ];
+            if (settings.zulip_merge_base) {
+              lines.push(`- Merge base: ${settings.zulip_merge_base}`);
+            }
+            lines.push(
+              `- Push notifications: ${settings.push_notifications_enabled ? "Enabled" : "Disabled"}`,
+            );
+            if (settings.realm_name) {
+              lines.push(`- Organization: ${settings.realm_name}`);
+            }
+            if (settings.realm_description) {
+              lines.push(`- Description: ${settings.realm_description}`);
+            }
+            if (settings.realm_uri) {
+              lines.push(`- URL: ${settings.realm_uri}`);
+            }
+            return {
+              content: [{ type: "text", text: lines.join("\n") }],
+            };
+          }
+
+          case "profile_fields": {
+            const fields = await listZulipCustomProfileFields(client);
+            if (fields.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "No custom profile fields configured for this organization.",
+                  },
+                ],
+              };
+            }
+            const lines = fields.map((f) => {
+              const typeName = getProfileFieldTypeName(f.type);
+              const hint = f.hint ? ` — hint: "${f.hint}"` : "";
+              const summary = f.display_in_profile_summary
+                ? " ⭐"
+                : "";
+              let options = "";
+              if (f.type === 3 && f.field_data) {
+                try {
+                  const parsed = JSON.parse(f.field_data) as Record<
+                    string,
+                    { text: string; order: string }
+                  >;
+                  const optList = Object.values(parsed)
+                    .sort((a, b) => Number(a.order) - Number(b.order))
+                    .map((o) => o.text);
+                  if (optList.length > 0) {
+                    options = ` [${optList.join(", ")}]`;
+                  }
+                } catch {
+                  // ignore parse errors
+                }
+              }
+              return `- **${f.name}** (id:${f.id}, type: ${typeName})${hint}${options}${summary}`;
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${fields.length} custom profile field(s):\n${lines.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "user_profile": {
+            if (!params.userId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: userId is required for user_profile.",
+                  },
+                ],
+              };
+            }
+            // Fetch profile fields and user data in parallel
+            const [fields, profileData] = await Promise.all([
+              listZulipCustomProfileFields(client),
+              getZulipUserProfileData(client, params.userId),
+            ]);
+            const fieldMap = new Map(fields.map((f) => [String(f.id), f]));
+            const entries = Object.entries(profileData);
+            if (entries.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `User ${params.userId} has no custom profile data set.`,
+                  },
+                ],
+              };
+            }
+            const lines = entries
+              .map(([fieldId, data]) => {
+                const field = fieldMap.get(fieldId);
+                const label = field ? field.name : `Field ${fieldId}`;
+                const value = data.rendered_value ?? data.value;
+                return `- **${label}**: ${value}`;
+              })
+              .filter(Boolean);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Custom profile data for user ${params.userId}:\n${lines.join("\n")}`,
+                },
               ],
             };
           }
