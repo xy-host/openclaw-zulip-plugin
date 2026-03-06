@@ -439,7 +439,7 @@ export async function getZulipUser(
   client: ZulipClient,
   userId: number,
 ): Promise<ZulipUser> {
-  const data = await client.request<{ user: ZulipUser }>();
+  const data = await client.request<{ user: ZulipUser }>(`/users/${userId}`);
   return data.user;
 }
 
