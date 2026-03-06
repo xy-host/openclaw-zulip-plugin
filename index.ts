@@ -3195,7 +3195,8 @@ const plugin = {
             type: "string",
             description:
               "MIME type of the file (e.g. image/png, application/pdf). " +
-              "If omitted, it is inferred from the URL response headers or file extension.",
+              "If omitted, it is inferred from the URL response headers (for url) " +
+              "or from the base64/data URI metadata (for base64), when available.",
           },
         },
         required: [],
@@ -3243,7 +3244,32 @@ const plugin = {
                 raw = raw.slice(commaIdx + 1);
               }
             }
-            fileBuffer = Buffer.from(raw, "base64");
+
+            // Basic base64 validation
+            const stripped = raw.replace(/\s/g, "");
+            const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/;
+            if (!stripped || stripped.length % 4 !== 0 || !base64Regex.test(stripped)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: invalid base64 content provided for file upload.",
+                  },
+                ],
+              };
+            }
+
+            fileBuffer = Buffer.from(stripped, "base64");
+            if (fileBuffer.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: base64 content decoded to an empty file.",
+                  },
+                ],
+              };
+            }
           } catch (err) {
             return {
               content: [
@@ -3256,6 +3282,30 @@ const plugin = {
           }
           if (!fileName) fileName = "upload";
         } else {
+          // Validate URL protocol to prevent SSRF
+          try {
+            const parsedUrl = new URL(params.url);
+            if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: only http and https URLs are supported.",
+                  },
+                ],
+              };
+            }
+          } catch {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Error: invalid URL provided.",
+                },
+              ],
+            };
+          }
+
           // Fetch from URL
           try {
             const response = await fetch(params.url);
@@ -3273,15 +3323,42 @@ const plugin = {
               const ct = response.headers.get("content-type");
               if (ct) contentType = ct.split(";")[0].trim();
             }
+            // Check Content-Length before downloading if available
+            const contentLength = response.headers.get("content-length");
+            const MAX_UPLOAD_SIZE = 25 * 1024 * 1024; // 25 MB
+            if (contentLength && Number(contentLength) > MAX_UPLOAD_SIZE) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: file too large (${(Number(contentLength) / 1024 / 1024).toFixed(1)} MB). Maximum upload size is 25 MB.`,
+                  },
+                ],
+              };
+            }
+
             const arrayBuffer = await response.arrayBuffer();
             fileBuffer = Buffer.from(arrayBuffer);
+
+            // Enforce max size after download (Content-Length may be absent)
+            if (fileBuffer.length > MAX_UPLOAD_SIZE) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: file too large (${(fileBuffer.length / 1024 / 1024).toFixed(1)} MB). Maximum upload size is 25 MB.`,
+                  },
+                ],
+              };
+            }
 
             // Derive file name from URL if not provided
             if (!fileName) {
               try {
                 const urlPath = new URL(params.url).pathname;
-                const lastSegment = urlPath.split("/").pop();
-                if (lastSegment && lastSegment.includes(".")) {
+                const segments = urlPath.split("/").filter(Boolean);
+                const lastSegment = segments.pop();
+                if (lastSegment) {
                   fileName = decodeURIComponent(lastSegment);
                 }
               } catch {
