@@ -3573,9 +3573,9 @@ const plugin = {
 
 
     api.registerTool({
-      name: "zulip_user_topics",
+      name: "zulip_user_preferences",
       description:
-        "Manage personal topic visibility preferences in Zulip: mute, unmute, follow, or reset topics. " +
+        "Manage personal preferences in Zulip: topic visibility (mute, unmute, follow, reset) and user muting. " +
         "Also manage muted users to hide their messages. " +
         "Use to mute noisy topics, follow important topics for extra notifications, " +
         "unmute specific topics in muted streams, or mute/unmute users.",

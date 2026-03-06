@@ -306,8 +306,8 @@ List, add, or remove alert words for the bot user. Alert words trigger notificat
 - Removing a word that doesn't exist is also a no-op (no error)
 
 
-### `zulip_user_topics`
-Manage personal topic visibility preferences and muted users. Actions:
+### `zulip_user_preferences`
+Manage personal preferences: topic visibility and user muting. Actions:
 
 | Action | Required params | Description |
 |---|---|---|

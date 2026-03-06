@@ -103,7 +103,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_server_settings` | Query server info, list custom profile fields, get user profile data |
 | `zulip_message_flags` | Star/unstar messages, mark read/unread, check read receipts |
 | `zulip_alert_words` | List, add, or remove alert words that trigger notifications on keyword matches |
-| `zulip_user_topics` | Mute, unmute, follow, or reset topic visibility; manage muted users |
+| `zulip_user_preferences` | Mute, unmute, follow, or reset topic visibility; manage muted users |
 
 ## Configuration
 
