@@ -157,7 +157,6 @@ List, create, edit, or delete message drafts. Actions:
 - When editing, only `content` is required — the target (stream/DM) is preserved from the original draft unless you override it with `streamName` or `userId`
 - Use drafts to prepare messages that need review before sending
 
-
 ### `zulip_upload`
 Upload files to the Zulip server and get shareable URIs.
 
@@ -224,7 +223,6 @@ List, add, update, remove, or reorder linkifiers (auto-linking patterns) in the 
 - The order of linkifiers matters when patterns overlap — use `reorder` to prioritize
 - Use `list` to find `filterId` values before updating or removing
 
-
 ### `zulip_user_status`
 Get or set user status (emoji + text) in Zulip. User status appears next to the user's name. Actions:
 
@@ -244,7 +242,6 @@ Get or set user status (emoji + text) in Zulip. User status appears next to the 
 - Use `clear` to remove the bot's status entirely
 - The `emojiName` can be a standard Unicode emoji name or a custom emoji name (use `zulip_custom_emoji` list to find available custom emoji)
 - Status text is limited to 60 characters
-
 
 ### `zulip_server_settings`
 Query server/organization info and custom profile fields. Actions:
@@ -287,7 +284,6 @@ Manage personal message flags (star, read) and check read receipts. Actions:
 - `read_receipts` requires the organization to have read receipts enabled — if disabled, it returns an empty list
 - Use `zulip_messages` → `search` to find message IDs before starring or marking them
 
-
 ### `zulip_alert_words`
 List, add, or remove alert words for the bot user. Alert words trigger notifications whenever any message in the organization contains one of these words/phrases. Actions:
 
@@ -308,7 +304,6 @@ List, add, or remove alert words for the bot user. Alert words trigger notificat
 - The `add` and `remove` actions return the total count of alert words after the operation
 - Adding a word that already exists is a no-op (no error, no duplicate)
 - Removing a word that doesn't exist is also a no-op (no error)
-
 
 ## Formatting (Zulip Markdown)
 
