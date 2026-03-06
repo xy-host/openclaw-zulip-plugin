@@ -55,6 +55,7 @@ import {
   updateZulipMessageFlags,
   updateZulipMessageFlagsForNarrow,
   getZulipReadReceipts,
+  uploadZulipFile,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -3153,6 +3154,282 @@ const plugin = {
                 { type: "text", text: `Unknown action: ${params.action}` },
               ],
             };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_upload",
+      description:
+        "Upload a file to the Zulip server and get a shareable URI. " +
+        "Use to share images, documents, or other files in Zulip messages. " +
+        "The returned URI can be embedded in messages using Zulip markdown: [filename](uri). " +
+        "Accepts a public URL to fetch the file from, or a base64-encoded file.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          url: {
+            type: "string",
+            description:
+              "Public URL of the file to download and upload to Zulip. " +
+              "Supports any file type (images, PDFs, documents, etc.).",
+          },
+          base64: {
+            type: "string",
+            description:
+              "Base64-encoded file content. Use when the file is not available via URL. " +
+              "Mutually exclusive with url.",
+          },
+          fileName: {
+            type: "string",
+            description:
+              "Name for the uploaded file (e.g. report.pdf, screenshot.png). " +
+              "If omitted, a name is derived from the URL or defaults to upload.",
+          },
+          contentType: {
+            type: "string",
+            description:
+              "MIME type of the file (e.g. image/png, application/pdf). " +
+              "If omitted, it is inferred from the URL response headers (for url) " +
+              "or from the base64/data URI metadata (for base64), when available.",
+          },
+        },
+        required: [],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        if (!params.url && !params.base64) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: provide either url or base64 to upload a file.",
+              },
+            ],
+          };
+        }
+        if (params.url && params.base64) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: provide only one of url or base64, not both.",
+              },
+            ],
+          };
+        }
+
+        let fileBuffer: Buffer;
+        let fileName = params.fileName?.trim() || undefined;
+        let contentType = params.contentType?.trim() || undefined;
+
+        if (params.base64) {
+          // Decode base64
+          try {
+            // Support data: URI format
+            let raw = params.base64;
+            if (raw.startsWith("data:")) {
+              const commaIdx = raw.indexOf(",");
+              if (commaIdx >= 0) {
+                const meta = raw.slice(5, commaIdx);
+                const mimePart = meta.split(";")[0];
+                if (mimePart && !contentType) contentType = mimePart;
+                raw = raw.slice(commaIdx + 1);
+              }
+            }
+
+            // Basic base64 validation
+            const stripped = raw.replace(/\s/g, "");
+            const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/;
+            if (!stripped || stripped.length % 4 !== 0 || !base64Regex.test(stripped)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: invalid base64 content provided for file upload.",
+                  },
+                ],
+              };
+            }
+
+            fileBuffer = Buffer.from(stripped, "base64");
+            if (fileBuffer.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: base64 content decoded to an empty file.",
+                  },
+                ],
+              };
+            }
+          } catch (err) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error: failed to decode base64 content: ${String(err)}`,
+                },
+              ],
+            };
+          }
+          if (!fileName) fileName = "upload";
+        } else {
+          // Validate URL protocol to prevent SSRF
+          try {
+            const parsedUrl = new URL(params.url);
+            if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: only http and https URLs are supported.",
+                  },
+                ],
+              };
+            }
+          } catch {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Error: invalid URL provided.",
+                },
+              ],
+            };
+          }
+
+          // Fetch from URL
+          try {
+            const response = await fetch(params.url);
+            if (!response.ok) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: failed to fetch file from URL (HTTP ${response.status}).`,
+                  },
+                ],
+              };
+            }
+            if (!contentType) {
+              const ct = response.headers.get("content-type");
+              if (ct) contentType = ct.split(";")[0].trim();
+            }
+            // Check Content-Length before downloading if available
+            const contentLength = response.headers.get("content-length");
+            const MAX_UPLOAD_SIZE = 25 * 1024 * 1024; // 25 MB
+            if (contentLength && Number(contentLength) > MAX_UPLOAD_SIZE) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: file too large (${(Number(contentLength) / 1024 / 1024).toFixed(1)} MB). Maximum upload size is 25 MB.`,
+                  },
+                ],
+              };
+            }
+
+            const arrayBuffer = await response.arrayBuffer();
+            fileBuffer = Buffer.from(arrayBuffer);
+
+            // Enforce max size after download (Content-Length may be absent)
+            if (fileBuffer.length > MAX_UPLOAD_SIZE) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: file too large (${(fileBuffer.length / 1024 / 1024).toFixed(1)} MB). Maximum upload size is 25 MB.`,
+                  },
+                ],
+              };
+            }
+
+            // Derive file name from URL if not provided
+            if (!fileName) {
+              try {
+                const urlPath = new URL(params.url).pathname;
+                const segments = urlPath.split("/").filter(Boolean);
+                const lastSegment = segments.pop();
+                if (lastSegment) {
+                  fileName = decodeURIComponent(lastSegment);
+                }
+              } catch {
+                // ignore URL parsing errors
+              }
+              if (!fileName) fileName = "upload";
+            }
+          } catch (err) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error: failed to fetch file from URL: ${String(err)}`,
+                },
+              ],
+            };
+          }
+        }
+
+        // Add extension to fileName if missing and contentType is known
+        if (fileName && !fileName.includes(".") && contentType) {
+          const extMap: Record<string, string> = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+            "image/svg+xml": ".svg",
+            "application/pdf": ".pdf",
+            "text/plain": ".txt",
+            "text/csv": ".csv",
+            "application/json": ".json",
+            "application/zip": ".zip",
+          };
+          const ext = extMap[contentType];
+          if (ext) fileName += ext;
+        }
+
+        try {
+          const result = await uploadZulipFile(
+            client,
+            fileBuffer,
+            fileName ?? "upload",
+            contentType,
+          );
+
+          const sizeKB = (fileBuffer.length / 1024).toFixed(1);
+          const markdownLink = `[${fileName ?? "upload"}](${result.uri})`;
+
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `File uploaded \u2705\n` +
+                  `- **Name**: ${fileName ?? "upload"}\n` +
+                  `- **Size**: ${sizeKB} KB\n` +
+                  `- **Type**: ${contentType ?? "unknown"}\n` +
+                  `- **URI**: ${result.uri}\n\n` +
+                  `Use in messages: \`${markdownLink}\``,
+              },
+            ],
+          };
+        } catch (err) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: failed to upload file to Zulip: ${String(err)}`,
+              },
+            ],
+          };
         }
       },
     });

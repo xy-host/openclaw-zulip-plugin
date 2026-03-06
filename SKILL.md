@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Thirteen tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
+Fourteen tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -157,6 +157,23 @@ List, create, edit, or delete message drafts. Actions:
 - When editing, only `content` is required — the target (stream/DM) is preserved from the original draft unless you override it with `streamName` or `userId`
 - Use drafts to prepare messages that need review before sending
 
+
+### `zulip_upload`
+Upload files to the Zulip server and get shareable URIs.
+
+| Parameter | Required | Description |
+|---|---|---|
+| `url` | one of url/base64 | Public URL of the file to download and upload |
+| `base64` | one of url/base64 | Base64-encoded file content (mutually exclusive with url) |
+| `fileName` | no | Name for the uploaded file (derived from URL if omitted) |
+| `contentType` | no | MIME type (inferred from response headers if omitted) |
+
+**Tips**:
+- The returned URI can be used in Zulip messages with markdown: `[filename](uri)`
+- Supports any file type: images, PDFs, documents, archives, etc.
+- For base64 input, data: URI format is also accepted (e.g. `data:image/png;base64,...`)
+- File names without extensions get an extension added automatically based on content type
+- Use this tool to upload files independently, then reference the URI in messages via `zulip_send`
 
 ### `zulip_topics`
 Manage topics within streams: resolve, unresolve, rename, move, or delete. Actions:
