@@ -104,6 +104,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_message_flags` | Star/unstar messages, mark read/unread, check read receipts |
 | `zulip_alert_words` | List, add, or remove alert words that trigger notifications on keyword matches |
 | `zulip_stream_settings` | View and update per-stream subscription settings: pin, mute, color, and notification overrides |
+| `zulip_attachments` | List, delete uploaded file attachments, and check upload space usage |
 | `zulip_user_preferences` | Mute, unmute, follow, or reset topic visibility; manage muted users |
 
 ## Configuration

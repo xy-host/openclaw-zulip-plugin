@@ -1473,3 +1473,54 @@ export async function updateZulipSubscriptionProperties(
     body: body.toString(),
   });
 }
+
+// ── Attachments ──
+
+export type ZulipAttachment = {
+  id: number;
+  name: string;
+  size: number;
+  path_id: string;
+  create_time: number;
+  messages: Array<{
+    id: number;
+    date_sent: number;
+  }>;
+};
+
+export type ZulipAttachmentsResult = {
+  attachments: ZulipAttachment[];
+  uploadSpaceUsed: number;
+};
+
+/**
+ * List all files uploaded by the current user and return upload space usage.
+ * Returns both the attachment list and total upload space used (in bytes).
+ */
+export async function listZulipAttachments(
+  client: ZulipClient,
+): Promise<ZulipAttachmentsResult> {
+  const data = await client.request<{
+    attachments: ZulipAttachment[];
+    upload_space_used: number;
+    result: string;
+  }>("/attachments");
+  return {
+    attachments: data.attachments ?? [],
+    uploadSpaceUsed: data.upload_space_used ?? 0,
+  };
+}
+
+/**
+ * Delete an uploaded file by its attachment ID.
+ * Only the user who uploaded the file (or an admin) can delete it.
+ */
+export async function deleteZulipAttachment(
+  client: ZulipClient,
+  attachmentId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/attachments/${attachmentId}`,
+    { method: "DELETE" },
+  );
+}

@@ -389,6 +389,26 @@ Manage personal preferences: topic visibility and user muting. Actions:
 - Use `list_muted_users` to see all currently muted users with timestamps
 - Muting yourself is not allowed and will return an error
 
+
+### `zulip_attachments`
+List, delete, or check storage usage for uploaded file attachments. Complements `zulip_upload`. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `list` | — | List all files uploaded by the bot with IDs, names, sizes, and linked messages |
+| `delete` | `attachmentId` | Delete an uploaded file by its attachment ID |
+| `usage` | — | Show total upload space used by the bot |
+
+**Parameters**:
+- `attachmentId` — numeric attachment ID (for delete). Use `list` to find IDs.
+
+**Tips**:
+- Use `list` to review all uploaded files — each entry shows the file name, size, upload date, and how many messages reference it
+- Files not referenced in any message can usually be safely deleted
+- Use `usage` to monitor how much upload storage the bot is consuming
+- Use `delete` to clean up old or unused attachments and free storage space
+- This tool manages files already uploaded; use `zulip_upload` to upload new files
+
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:
