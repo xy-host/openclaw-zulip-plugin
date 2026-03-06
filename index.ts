@@ -70,6 +70,7 @@ import {
   updateZulipSubscriptionProperties,
   listZulipAttachments,
   deleteZulipAttachment,
+  getZulipMessageHistory,
   type ZulipSubscriptionProperty,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
@@ -796,9 +797,10 @@ const plugin = {
     api.registerTool({
       name: "zulip_messages",
       description:
-        "Search, fetch, edit, delete Zulip messages, and manage reactions. " +
+        "Search, fetch, edit, delete Zulip messages, manage reactions, and view edit history. " +
         "Use to retrieve message history from streams/topics/DMs, look up a specific message, " +
-        "edit or delete messages the bot has sent, or add/remove emoji reactions.",
+        "edit or delete messages the bot has sent, add/remove emoji reactions, " +
+        "or view the edit history of a message to see past versions and changes.",
       parameters: {
         type: "object",
         properties: {
@@ -816,12 +818,13 @@ const plugin = {
               "delete",
               "add_reaction",
               "remove_reaction",
+              "history",
             ],
             description: "Action to perform",
           },
           messageId: {
             type: "number",
-            description: "Message ID (for get/edit/delete/add_reaction/remove_reaction)",
+            description: "Message ID (for get/edit/delete/add_reaction/remove_reaction/history)",
           },
           query: {
             type: "string",
@@ -1159,6 +1162,78 @@ const plugin = {
                 {
                   type: "text",
                   text: `Removed :${params.emojiName}: from message ${params.messageId} ✅`,
+                },
+              ],
+            };
+          }
+
+          case "history": {
+            if (!params.messageId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: messageId is required for history.",
+                  },
+                ],
+              };
+            }
+            const history = await getZulipMessageHistory(client, params.messageId);
+            if (history.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `No edit history found for message ${params.messageId} (edit history may be disabled by the organization).`,
+                  },
+                ],
+              };
+            }
+
+            const lines: string[] = [];
+            for (let i = 0; i < history.length; i++) {
+              const entry = history[i];
+              const date = new Date(entry.timestamp * 1000).toISOString();
+              const editor = entry.user_id != null ? `user ${entry.user_id}` : "unknown";
+
+              if (i === 0) {
+                // First entry is the original message
+                const contentPreview = (entry.content ?? "(no content)")
+                  .slice(0, 500);
+                const topicInfo = entry.topic ? ` | Topic: ${entry.topic}` : "";
+                lines.push(
+                  `**Original** (${date}) by ${editor}${topicInfo}:\n${contentPreview}`,
+                );
+              } else {
+                // Subsequent entries are edits
+                const parts: string[] = [];
+                if (entry.prev_content !== undefined && entry.content !== undefined) {
+                  const prevPreview = entry.prev_content.slice(0, 300);
+                  const newPreview = entry.content.slice(0, 300);
+                  parts.push(`Content changed:\n  Before: ${prevPreview}\n  After: ${newPreview}`);
+                }
+                if (entry.prev_topic !== undefined && entry.topic !== undefined) {
+                  parts.push(`Topic changed: "${entry.prev_topic}" → "${entry.topic}"`);
+                }
+                if (entry.prev_stream !== undefined && entry.stream !== undefined) {
+                  parts.push(`Stream changed: ${entry.prev_stream} → ${entry.stream}`);
+                }
+                if (parts.length === 0) {
+                  parts.push("(metadata-only change)");
+                }
+                lines.push(
+                  `**Edit ${i}** (${date}) by ${editor}:\n${parts.join("\n")}`,
+                );
+              }
+            }
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Edit history for message ${params.messageId} (${history.length} version${history.length > 1 ? "s" : ""}):\n\n` +
+                    lines.join("\n\n---\n\n"),
                 },
               ],
             };

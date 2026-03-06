@@ -1524,3 +1524,37 @@ export async function deleteZulipAttachment(
     { method: "DELETE" },
   );
 }
+
+// ── Message Edit History ──
+
+export type ZulipMessageHistoryEntry = {
+  user_id: number | null;
+  timestamp: number;
+  prev_content?: string;
+  content?: string;
+  prev_rendered_content?: string;
+  rendered_content?: string;
+  prev_topic?: string;
+  topic?: string;
+  prev_stream?: number;
+  stream?: number;
+  content_html_diff?: string;
+};
+
+/**
+ * Get the edit history of a message.
+ * Returns a list of snapshots in chronological order (oldest first).
+ * The first entry represents the original message; subsequent entries are edits.
+ *
+ * Requires the organization to have "allow_edit_history" enabled.
+ */
+export async function getZulipMessageHistory(
+  client: ZulipClient,
+  messageId: number,
+): Promise<ZulipMessageHistoryEntry[]> {
+  const data = await client.request<{
+    message_history: ZulipMessageHistoryEntry[];
+    result: string;
+  }>(`/messages/${messageId}/history`);
+  return data.message_history ?? [];
+}
