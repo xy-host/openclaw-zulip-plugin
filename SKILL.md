@@ -98,7 +98,7 @@ Search, fetch, edit, delete messages, manage emoji reactions, and view edit hist
 - The response includes pagination hints with the IDs needed to fetch the next/previous page
 
 **History action**:
-- Returns all past versions of a message in reverse chronological order
+- Returns all past versions of a message in chronological order
 - The first entry is the original message; subsequent entries show each edit
 - Each entry includes timestamps, the editor's user ID, and what changed (content, topic, stream)
 - Requires the organization to have edit history enabled (most Zulip servers have this on by default)

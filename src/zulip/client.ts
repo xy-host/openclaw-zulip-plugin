@@ -1543,7 +1543,7 @@ export type ZulipMessageHistoryEntry = {
 
 /**
  * Get the edit history of a message.
- * Returns a list of snapshots in reverse chronological order (newest first).
+ * Returns a list of snapshots in chronological order (oldest first).
  * The first entry represents the original message; subsequent entries are edits.
  *
  * Requires the organization to have "allow_edit_history" enabled.

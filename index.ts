@@ -1198,7 +1198,7 @@ const plugin = {
 
               if (i === 0) {
                 // First entry is the original message
-                const contentPreview = (entry.content ?? entry.rendered_content ?? "(no content)")
+                const contentPreview = (entry.content ?? "(no content)")
                   .slice(0, 500);
                 const topicInfo = entry.topic ? ` | Topic: ${entry.topic}` : "";
                 lines.push(
