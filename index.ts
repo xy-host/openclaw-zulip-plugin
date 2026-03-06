@@ -653,7 +653,8 @@ const plugin = {
               "Message ID or special value to anchor the search (for search). " +
               "Use a numeric message ID to fetch messages around that point, " +
               "'newest' (default) to start from the most recent, " +
-              "or 'oldest' to start from the earliest. " +
+              "'oldest' to start from the earliest, " +
+              "or 'first_unread' to start from the first unread message. " +
               "Combine with 'before'/'after' for pagination.",
           },
           before: {
@@ -751,8 +752,27 @@ const plugin = {
             let numBefore: number;
             let numAfter: number;
             if (params.before !== undefined || params.after !== undefined) {
-              numBefore = Math.min(Math.max(params.before ?? 0, 0), 100);
-              numAfter = Math.min(Math.max(params.after ?? 0, 0), 100);
+              const rawBefore = Math.min(Math.max(params.before ?? 0, 0), 100);
+              const rawAfter = Math.min(Math.max(params.after ?? 0, 0), 100);
+              const totalRequested = rawBefore + rawAfter;
+              // Enforce total does not exceed limit to avoid surprising response sizes
+              if (totalRequested <= limit) {
+                numBefore = rawBefore;
+                numAfter = rawAfter;
+              } else {
+                // Proportionally scale down to fit within limit
+                const scale = limit / totalRequested;
+                numBefore = Math.floor(rawBefore * scale);
+                numAfter = Math.floor(rawAfter * scale);
+                const remaining = limit - (numBefore + numAfter);
+                if (remaining > 0) {
+                  if (rawBefore >= rawAfter) {
+                    numBefore += remaining;
+                  } else {
+                    numAfter += remaining;
+                  }
+                }
+              }
             } else if (anchor === "oldest") {
               numBefore = 0;
               numAfter = limit;

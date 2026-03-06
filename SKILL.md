@@ -73,8 +73,8 @@ Search, fetch, edit, delete messages and manage emoji reactions. Actions:
 
 **Pagination parameters** (for search, all optional):
 - `anchor` — message ID or `"newest"` (default) / `"oldest"` / `"first_unread"` to set the reference point
-- `before` — number of messages to fetch before the anchor (default: `limit` when anchor is `"newest"`, 0 when `"oldest"`)
-- `after` — number of messages to fetch after the anchor (default: 0 when anchor is `"newest"`, `limit` when `"oldest"`)
+- `before` — number of messages to fetch before the anchor (default: `limit` when anchor is `"newest"`, `"first_unread"`, or a message ID; 0 when `"oldest"`)
+- `after` — number of messages to fetch after the anchor (default: 0 when anchor is `"newest"`, `"first_unread"`, or a message ID; `limit` when `"oldest"`)
 - `includeAnchor` — whether to include the anchor message itself (default: true; set to false when paginating to avoid duplicates)
 
 **Pagination examples**:
