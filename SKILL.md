@@ -228,6 +228,7 @@ Get or set user status (emoji + text) in Zulip. User status appears next to the 
 - Use `clear` to remove the bot's status text, emoji, and away flag
 - The `emojiName` can be a standard Unicode emoji name or a custom emoji name (use `zulip_custom_emoji` list to find available custom emoji)
 - Status text is limited to 60 characters
+
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:

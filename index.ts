@@ -2517,9 +2517,9 @@ const plugin = {
     api.registerTool({
       name: "zulip_user_status",
       description:
-        "Get or set user status in Zulip. " +
+        "Get, set, or clear user status in Zulip. " +
         "User status includes a text message and an optional emoji that appear next to the user's name. " +
-        "Use 'get' to check any user's current status, or 'set' to update the bot's own status.",
+        "Use 'get' to check any user's current status, 'set' to update the bot's own status, or 'clear' to remove the bot's status.",
       parameters: {
         type: "object",
         properties: {
