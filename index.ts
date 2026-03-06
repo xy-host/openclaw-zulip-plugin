@@ -71,6 +71,7 @@ import {
   listZulipAttachments,
   deleteZulipAttachment,
   getZulipMessageHistory,
+  listZulipUserTopics,
   type ZulipSubscriptionProperty,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
@@ -3953,10 +3954,10 @@ const plugin = {
     api.registerTool({
       name: "zulip_user_preferences",
       description:
-        "Manage personal preferences in Zulip: topic visibility (mute, unmute, follow, reset) and user muting. " +
-        "Also manage muted users to hide their messages. " +
+        "Manage personal preferences in Zulip: topic visibility (mute, unmute, follow, reset), " +
+        "list all custom topic visibility policies, and manage muted users. " +
         "Use to mute noisy topics, follow important topics for extra notifications, " +
-        "unmute specific topics in muted streams, or mute/unmute users.",
+        "unmute specific topics in muted streams, list all topics with custom visibility, or mute/unmute users.",
       parameters: {
         type: "object",
         properties: {
@@ -3972,6 +3973,7 @@ const plugin = {
               "unmute_topic",
               "follow_topic",
               "reset_topic",
+              "list_visibility_policies",
               "list_muted_users",
               "mute_user",
               "unmute_user",
@@ -3982,6 +3984,7 @@ const plugin = {
               "'unmute_topic' unmutes a topic (useful in muted streams), " +
               "'follow_topic' enables extra notifications for all messages in a topic, " +
               "'reset_topic' removes any visibility policy (restores default behavior), " +
+              "'list_visibility_policies' lists all topics with custom visibility policies (muted, unmuted, followed), " +
               "'list_muted_users' shows all users you have muted, " +
               "'mute_user' mutes a user (their messages are auto-read and hidden), " +
               "'unmute_user' unmutes a previously muted user.",
@@ -3995,6 +3998,14 @@ const plugin = {
             type: "string",
             description:
               "Topic name to modify the visibility policy for (required for topic actions).",
+          },
+          filterPolicy: {
+            type: "string",
+            enum: ["muted", "unmuted", "followed", "all"],
+            description:
+              "Filter topics by visibility policy (for list_visibility_policies). " +
+              "'muted' = only muted topics, 'unmuted' = only unmuted topics, " +
+              "'followed' = only followed topics, 'all' = all custom policies (default).",
           },
           userId: {
             type: "number",
@@ -4088,6 +4099,125 @@ const plugin = {
                   text:
                     `${actionLabel} topic: #${params.streamName} > ${params.topic} ` +
                     `(policy: ${policyLabel}) \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "list_visibility_policies": {
+            const userTopics = await listZulipUserTopics(client);
+
+            // Apply filter if specified
+            const filterPolicy = params.filterPolicy ?? "all";
+            const policyFilter: Record<string, number[]> = {
+              muted: [TOPIC_VISIBILITY_POLICIES.muted],
+              unmuted: [TOPIC_VISIBILITY_POLICIES.unmuted],
+              followed: [TOPIC_VISIBILITY_POLICIES.followed],
+              all: [
+                TOPIC_VISIBILITY_POLICIES.muted,
+                TOPIC_VISIBILITY_POLICIES.unmuted,
+                TOPIC_VISIBILITY_POLICIES.followed,
+              ],
+            };
+            const allowedPolicies = policyFilter[filterPolicy] ?? policyFilter.all;
+            const filtered = userTopics.filter((ut) =>
+              allowedPolicies.includes(ut.visibility_policy),
+            );
+
+            if (filtered.length === 0) {
+              if (filterPolicy !== "all" && userTopics.length > 0) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text:
+                        `No topics with policy "${filterPolicy}" found, ` +
+                        `but there are ${userTopics.length} topic(s) with other custom visibility policies. ` +
+                        `Use filterPolicy="all" to see them all.`,
+                    },
+                  ],
+                };
+              }
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "No topics with custom visibility policies found. All topics use default behavior.",
+                  },
+                ],
+              };
+            }
+
+            // Resolve stream IDs to names for readability
+            let streamMap: Map<number, string> | null = null;
+            try {
+              // Collect the set of stream IDs we actually need to resolve
+              const neededStreamIds = new Set<number>();
+              for (const ut of filtered) {
+                if (ut.stream_id != null) {
+                  neededStreamIds.add(ut.stream_id);
+                }
+              }
+
+              // First, resolve from subscriptions (cheaper than listing all streams)
+              const subs = await listZulipSubscriptions(client);
+              streamMap = new Map();
+              for (const s of subs) {
+                if (neededStreamIds.has(s.stream_id)) {
+                  streamMap.set(s.stream_id, s.name);
+                  neededStreamIds.delete(s.stream_id);
+                }
+              }
+
+              // Only fetch all streams if there are still unresolved IDs
+              if (neededStreamIds.size > 0) {
+                const allStreams = await listZulipStreams(client);
+                for (const s of allStreams) {
+                  if (neededStreamIds.has(s.stream_id)) {
+                    streamMap.set(s.stream_id, s.name);
+                    neededStreamIds.delete(s.stream_id);
+                    if (neededStreamIds.size === 0) {
+                      break;
+                    }
+                  }
+                }
+              }
+            } catch {
+              // If stream lookup fails, fall back to stream IDs
+            }
+
+            // Group topics by policy for clearer output
+            const policyGroups: Record<number, typeof filtered> = {};
+            for (const ut of filtered) {
+              const p = ut.visibility_policy;
+              if (!policyGroups[p]) policyGroups[p] = [];
+              policyGroups[p].push(ut);
+            }
+
+            const sections: string[] = [];
+            const policyOrder: Array<[number, string, string]> = [
+              [TOPIC_VISIBILITY_POLICIES.followed, "Followed", "👁️"],
+              [TOPIC_VISIBILITY_POLICIES.muted, "Muted", "🔇"],
+              [TOPIC_VISIBILITY_POLICIES.unmuted, "Unmuted", "🔔"],
+            ];
+
+            for (const [policyNum, label, emoji] of policyOrder) {
+              const topics = policyGroups[policyNum as number];
+              if (!topics || topics.length === 0) continue;
+              const lines = topics.map((t) => {
+                const streamLabel = streamMap?.get(t.stream_id) ?? `stream_id:${t.stream_id}`;
+                return `  - #${streamLabel} > ${t.topic_name}`;
+              });
+              sections.push(`**${emoji} ${label}** (${topics.length}):\n${lines.join("\n")}`);
+            }
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `${filtered.length} topic(s) with custom visibility policies:\n\n` +
+                    sections.join("\n\n"),
                 },
               ],
             };

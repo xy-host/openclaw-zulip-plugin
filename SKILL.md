@@ -377,6 +377,7 @@ Manage personal preferences: topic visibility and user muting. Actions:
 | `unmute_topic` | `streamName`, `topic` | Unmute a topic (useful in muted streams to get notifications for specific topics) |
 | `follow_topic` | `streamName`, `topic` | Follow a topic — get notified about all messages, not just mentions |
 | `reset_topic` | `streamName`, `topic` | Remove any visibility policy, restoring default behavior |
+| `list_visibility_policies` | — (optional `filterPolicy`) | List all topics with custom visibility policies (muted, unmuted, followed) |
 | `list_muted_users` | — | List all users the bot has muted |
 | `mute_user` | `userId` | Mute a user — their messages are auto-read and hidden |
 | `unmute_user` | `userId` | Unmute a previously muted user |
@@ -384,6 +385,7 @@ Manage personal preferences: topic visibility and user muting. Actions:
 **Topic action parameters**:
 - `streamName` — the stream where the topic lives (plain name, no `#` or `**`)
 - `topic` — the topic name to set the visibility policy for
+- `filterPolicy` — filter for `list_visibility_policies`: `"muted"`, `"unmuted"`, `"followed"`, or `"all"` (default)
 
 **User action parameters**:
 - `userId` — the numeric user ID to mute/unmute (use `zulip_users` to find IDs)
@@ -393,6 +395,8 @@ Manage personal preferences: topic visibility and user muting. Actions:
 - Unmuting a topic is especially useful when the entire stream is muted but you want notifications for one specific topic
 - Following a topic enables notifications for every message, similar to being @mentioned on each one
 - Resetting a topic removes any custom visibility policy, returning to the stream's default behavior
+- Use `list_visibility_policies` to see all topics you have muted, followed, or unmuted — helpful for auditing your notification setup
+- Use `filterPolicy` to narrow the list (e.g., `filterPolicy: "followed"` to see only followed topics)
 - Muted users' messages are automatically marked as read and hidden from the UI
 - Use `list_muted_users` to see all currently muted users with timestamps
 - Muting yourself is not allowed and will return an error
