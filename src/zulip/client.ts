@@ -1115,3 +1115,113 @@ export async function getZulipUserProfileData(
   }>(`/users/${userId}`);
   return data.user?.profile_data ?? {};
 }
+
+// ── Message Flags ──
+
+export type ZulipMessageFlag =
+  | "read"
+  | "starred"
+  | "collapsed"
+  | "mentioned"
+  | "wildcard_mentioned"
+  | "has_alert_word"
+  | "historical";
+
+export type ZulipUpdateFlagsResult = {
+  messages: number[];
+};
+
+/**
+ * Add or remove personal message flags on a collection of message IDs.
+ * Supports flags: read, starred, collapsed, etc.
+ */
+export async function updateZulipMessageFlags(
+  client: ZulipClient,
+  params: {
+    messages: number[];
+    op: "add" | "remove";
+    flag: ZulipMessageFlag;
+  },
+): Promise<ZulipUpdateFlagsResult> {
+  const body = new URLSearchParams();
+  body.set("messages", JSON.stringify(params.messages));
+  body.set("op", params.op);
+  body.set("flag", params.flag);
+  const data = await client.request<{
+    messages: number[];
+    result: string;
+  }>("/messages/flags", {
+    method: "POST",
+    body: body.toString(),
+  });
+  return { messages: data.messages ?? [] };
+}
+
+/**
+ * Add or remove personal message flags on a range of messages within a narrow.
+ * More efficient than updateZulipMessageFlags for bulk operations on topics/streams.
+ */
+export async function updateZulipMessageFlagsForNarrow(
+  client: ZulipClient,
+  params: {
+    anchor: string | number;
+    numBefore: number;
+    numAfter: number;
+    narrow: Array<{ operator: string; operand: string | number }>;
+    op: "add" | "remove";
+    flag: ZulipMessageFlag;
+    includeAnchor?: boolean;
+  },
+): Promise<{
+  processed_count: number;
+  updated_count: number;
+  first_processed_id: number | null;
+  last_processed_id: number | null;
+  found_oldest: boolean;
+  found_newest: boolean;
+}> {
+  const body = new URLSearchParams();
+  body.set("anchor", String(params.anchor));
+  body.set("num_before", String(params.numBefore));
+  body.set("num_after", String(params.numAfter));
+  body.set("narrow", JSON.stringify(params.narrow));
+  body.set("op", params.op);
+  body.set("flag", params.flag);
+  if (params.includeAnchor !== undefined) {
+    body.set("include_anchor", String(params.includeAnchor));
+  }
+  const data = await client.request<{
+    processed_count: number;
+    updated_count: number;
+    first_processed_id: number | null;
+    last_processed_id: number | null;
+    found_oldest: boolean;
+    found_newest: boolean;
+    result: string;
+  }>("/messages/flags/narrow", {
+    method: "POST",
+    body: body.toString(),
+  });
+  return {
+    processed_count: data.processed_count,
+    updated_count: data.updated_count,
+    first_processed_id: data.first_processed_id,
+    last_processed_id: data.last_processed_id,
+    found_oldest: data.found_oldest,
+    found_newest: data.found_newest,
+  };
+}
+
+/**
+ * Get the list of user IDs who have read a specific message.
+ */
+export async function getZulipReadReceipts(
+  client: ZulipClient,
+  messageId: number,
+): Promise<number[]> {
+  const data = await client.request<{
+    user_ids: number[];
+    result: string;
+  }>(`/messages/${messageId}/read_receipts`);
+  return data.user_ids ?? [];
+}

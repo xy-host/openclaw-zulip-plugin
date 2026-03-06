@@ -100,6 +100,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_linkifiers` | List, add, update, remove, or reorder auto-linking patterns (linkifiers) |
 | `zulip_user_status` | Get or set user status (emoji, text, away flag) |
 | `zulip_server_settings` | Query server info, list custom profile fields, get user profile data |
+| `zulip_message_flags` | Star/unstar messages, mark read/unread, check read receipts |
 
 ## Configuration
 
