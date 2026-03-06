@@ -4,7 +4,7 @@ A custom [Zulip](https://zulip.com) channel plugin for [OpenClaw](https://github
 
 ## Features
 
-- **DM & Stream messaging** — receive and reply to both direct messages and stream topics
+- **DM & Stream messaging** — receive and reply to direct messages (1:1 and group DMs/huddles) and stream topics
 - **Pairing-based DM policy** — DM access requires explicit approval
 - **Auto-reply streams** — configurable streams that don't require @mention
 - **Typing indicators** — shows typing status in both DMs and stream topics
@@ -89,7 +89,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | Tool | Description |
 |------|-------------|
 | `zulip_streams` | List, create, join, leave, update, delete streams; list topics and members |
-| `zulip_send` | Send messages to streams (with topic) or DMs |
+| `zulip_send` | Send messages to streams (with topic), 1:1 DMs, or group DMs (huddles) |
 | `zulip_users` | List users, look up by ID or email, check presence status |
 | `zulip_messages` | Search/fetch messages, edit/delete bot messages, add/remove emoji reactions |
 | `zulip_scheduled_messages` | Create, list, edit, or delete scheduled messages for future delivery |

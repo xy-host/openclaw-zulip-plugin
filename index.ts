@@ -351,7 +351,9 @@ const plugin = {
       name: "zulip_send",
       description:
         "Send a message to a Zulip stream (with topic) or DM. " +
-        "For streams: provide streamName and topic. For DMs: provide userId.",
+        "For streams: provide streamName and topic. " +
+        "For 1:1 DMs: provide userId. " +
+        "For group DMs (huddles): provide userIds array with multiple user IDs.",
       parameters: {
         type: "object",
         properties: {
@@ -370,7 +372,15 @@ const plugin = {
           },
           userId: {
             type: "string",
-            description: "User ID for direct message",
+            description:
+              "User ID for a 1:1 direct message. Mutually exclusive with userIds and streamName.",
+          },
+          userIds: {
+            type: "array",
+            items: { type: "number" },
+            description:
+              "Array of user IDs for a group DM (huddle). Must contain at least 2 distinct user IDs. " +
+              "Mutually exclusive with userId and streamName. Use zulip_users to find user IDs.",
           },
           content: {
             type: "string",
@@ -382,6 +392,19 @@ const plugin = {
       async execute(_id: string, params: any) {
         const cfg = api.runtime.config.loadConfig();
         const client = getClient(cfg, params.accountId);
+
+        // Validate mutual exclusivity of target parameters
+        const targetCount = [params.streamName, params.userId, params.userIds].filter(Boolean).length;
+        if (targetCount > 1) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: provide only one of streamName, userId, or userIds.",
+              },
+            ],
+          };
+        }
 
         if (params.streamName) {
           const result = await sendZulipApiMessage(client, {
@@ -398,10 +421,70 @@ const plugin = {
               },
             ],
           };
-        } else if (params.userId) {
+        } else if (params.userIds) {
+          if (!Array.isArray(params.userIds) || params.userIds.length < 2) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Error: userIds must be an array with at least 2 user IDs for a group DM. For 1:1 DMs, use userId instead.",
+                },
+              ],
+            };
+          }
+          const invalidIds = params.userIds.filter(
+            (id: unknown) => typeof id !== "number" || !Number.isFinite(id) || id <= 0,
+          );
+          if (invalidIds.length > 0) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Error: invalid user ID(s) in userIds: ${JSON.stringify(invalidIds)}. All IDs must be positive numbers.`,
+                },
+              ],
+            };
+          }
+          // Deduplicate to ensure we have at least 2 distinct recipients
+          const uniqueIds = [...new Set(params.userIds as number[])];
+          if (uniqueIds.length < 2) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Error: userIds must contain at least 2 distinct user IDs for a group DM. For 1:1 DMs, use userId instead.",
+                },
+              ],
+            };
+          }
           const result = await sendZulipApiMessage(client, {
             type: "direct",
-            to: JSON.stringify([Number(params.userId)]),
+            to: JSON.stringify(uniqueIds),
+            content: params.content,
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Sent group DM to users [${uniqueIds.join(", ")}] (id:${result.id}) ✅`,
+              },
+            ],
+          };
+        } else if (params.userId) {
+          const parsedUserId = Number(params.userId);
+          if (!Number.isFinite(parsedUserId) || parsedUserId <= 0) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "Error: userId must be a valid positive numeric user ID.",
+                },
+              ],
+            };
+          }
+          const result = await sendZulipApiMessage(client, {
+            type: "direct",
+            to: JSON.stringify([parsedUserId]),
             content: params.content,
           });
           return {
@@ -417,7 +500,7 @@ const plugin = {
             content: [
               {
                 type: "text",
-                text: "Error: provide either streamName or userId.",
+                text: "Error: provide streamName, userId, or userIds.",
               },
             ],
           };
