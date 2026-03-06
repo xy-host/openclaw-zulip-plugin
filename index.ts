@@ -56,6 +56,9 @@ import {
   updateZulipMessageFlagsForNarrow,
   getZulipReadReceipts,
   uploadZulipFile,
+  listZulipAlertWords,
+  addZulipAlertWords,
+  removeZulipAlertWords,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -3422,6 +3425,146 @@ const plugin = {
         }
       },
     });
+
+    api.registerTool({
+      name: "zulip_alert_words",
+      description:
+        "List, add, or remove alert words for the Zulip bot user. " +
+        "Alert words trigger notifications whenever any message in the organization " +
+        "contains one of these words/phrases, similar to an @mention. " +
+        "Use to monitor specific keywords, project names, or topics of interest.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["list", "add", "remove"],
+            description: "Action to perform",
+          },
+          words: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Array of alert words/phrases to add or remove (for add/remove actions). " +
+              "Alert words are case-insensitive and can be multi-word phrases.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "list": {
+            const words = await listZulipAlertWords(client);
+            if (words.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "No alert words configured." },
+                ],
+              };
+            }
+            const lines = words.map((w) => `- ${w}`);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${words.length} alert word(s):\n${lines.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "add": {
+            if (!params.words || !Array.isArray(params.words) || params.words.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: words array is required for add. Provide one or more words/phrases.",
+                  },
+                ],
+              };
+            }
+            const filtered = params.words
+              .map((w: string) => w.trim())
+              .filter((w: string) => w.length > 0);
+            if (filtered.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: all provided words are empty after trimming.",
+                  },
+                ],
+              };
+            }
+            const updatedWords = await addZulipAlertWords(client, filtered);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Added ${filtered.length} alert word(s): ${filtered.map((w: string) => `"${w}"`).join(", ")} ✅\n` +
+                    `Total alert words: ${updatedWords.length}`,
+                },
+              ],
+            };
+          }
+
+          case "remove": {
+            if (!params.words || !Array.isArray(params.words) || params.words.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: words array is required for remove. Provide one or more words/phrases to remove.",
+                  },
+                ],
+              };
+            }
+            const filtered = params.words
+              .map((w: string) => w.trim())
+              .filter((w: string) => w.length > 0);
+            if (filtered.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: all provided words are empty after trimming.",
+                  },
+                ],
+              };
+            }
+            const updatedWords = await removeZulipAlertWords(client, filtered);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Removed ${filtered.length} alert word(s): ${filtered.map((w: string) => `"${w}"`).join(", ")} ✅\n` +
+                    `Remaining alert words: ${updatedWords.length}`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
   },
 };
 
