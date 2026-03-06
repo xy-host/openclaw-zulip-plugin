@@ -305,6 +305,36 @@ List, add, or remove alert words for the bot user. Alert words trigger notificat
 - Adding a word that already exists is a no-op (no error, no duplicate)
 - Removing a word that doesn't exist is also a no-op (no error)
 
+
+### `zulip_user_preferences`
+Manage personal preferences: topic visibility and user muting. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `mute_topic` | `streamName`, `topic` | Mute a topic — silences notifications for it |
+| `unmute_topic` | `streamName`, `topic` | Unmute a topic (useful in muted streams to get notifications for specific topics) |
+| `follow_topic` | `streamName`, `topic` | Follow a topic — get notified about all messages, not just mentions |
+| `reset_topic` | `streamName`, `topic` | Remove any visibility policy, restoring default behavior |
+| `list_muted_users` | — | List all users the bot has muted |
+| `mute_user` | `userId` | Mute a user — their messages are auto-read and hidden |
+| `unmute_user` | `userId` | Unmute a previously muted user |
+
+**Topic action parameters**:
+- `streamName` — the stream where the topic lives (plain name, no `#` or `**`)
+- `topic` — the topic name to set the visibility policy for
+
+**User action parameters**:
+- `userId` — the numeric user ID to mute/unmute (use `zulip_users` to find IDs)
+
+**Tips**:
+- Muting a topic silences all notifications for it — messages still exist but won't trigger alerts
+- Unmuting a topic is especially useful when the entire stream is muted but you want notifications for one specific topic
+- Following a topic enables notifications for every message, similar to being @mentioned on each one
+- Resetting a topic removes any custom visibility policy, returning to the stream's default behavior
+- Muted users' messages are automatically marked as read and hidden from the UI
+- Use `list_muted_users` to see all currently muted users with timestamps
+- Muting yourself is not allowed and will return an error
+
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:

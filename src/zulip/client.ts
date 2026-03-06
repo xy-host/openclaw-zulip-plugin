@@ -1274,3 +1274,95 @@ export async function removeZulipAlertWords(
   );
   return data.alert_words ?? [];
 }
+
+// ── User Topic Preferences (Visibility Policy) ──
+
+/**
+ * Visibility policy values for user topics:
+ * 0 = None (remove policy)
+ * 1 = Muted
+ * 2 = Unmuted (useful in muted streams)
+ * 3 = Followed
+ */
+export type ZulipTopicVisibilityPolicy = 0 | 1 | 2 | 3;
+
+export const TOPIC_VISIBILITY_POLICIES: Record<string, ZulipTopicVisibilityPolicy> = {
+  none: 0,
+  muted: 1,
+  unmuted: 2,
+  followed: 3,
+};
+
+export const TOPIC_VISIBILITY_LABELS: Record<number, string> = {
+  0: "None",
+  1: "Muted",
+  2: "Unmuted",
+  3: "Followed",
+};
+
+/**
+ * Update the personal visibility policy for a topic in a stream.
+ * Uses POST /user_topics (Zulip 7.0+, feature level 170).
+ */
+export async function updateZulipUserTopic(
+  client: ZulipClient,
+  params: {
+    streamId: number;
+    topic: string;
+    visibilityPolicy: ZulipTopicVisibilityPolicy;
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("stream_id", String(params.streamId));
+  body.set("topic", params.topic);
+  body.set("visibility_policy", String(params.visibilityPolicy));
+  await client.request<{ result: string }>("/user_topics", {
+    method: "POST",
+    body: body.toString(),
+  });
+}
+
+// ── Muted Users ──
+
+export type ZulipMutedUser = {
+  id: number;
+  timestamp: number;
+};
+
+/**
+ * Get the list of users muted by the current user.
+ */
+export async function listZulipMutedUsers(
+  client: ZulipClient,
+): Promise<ZulipMutedUser[]> {
+  const data = await client.request<{ muted_users: ZulipMutedUser[]; result: string }>(
+    "/users/me/muted_users",
+  );
+  return data.muted_users ?? [];
+}
+
+/**
+ * Mute a user. Messages from muted users are automatically marked as read.
+ */
+export async function muteZulipUser(
+  client: ZulipClient,
+  userId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/users/me/muted_users/${userId}`,
+    { method: "POST" },
+  );
+}
+
+/**
+ * Unmute a previously muted user.
+ */
+export async function unmuteZulipUser(
+  client: ZulipClient,
+  userId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/users/me/muted_users/${userId}`,
+    { method: "DELETE" },
+  );
+}
