@@ -2850,7 +2850,7 @@ const plugin = {
     api.registerTool({
       name: "zulip_message_flags",
       description:
-        "Manage personal message flags (star, read, collapse) and check read receipts in Zulip. " +
+        "Manage personal message flags (star, read) and check read receipts in Zulip. " +
         "Use to star/unstar important messages, mark messages or entire topics as read/unread, " +
         "or check which users have read a specific message.",
       parameters: {
@@ -2920,6 +2920,18 @@ const plugin = {
                 ],
               };
             }
+            if (params.messageIds.length > 100) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: messageIds array may contain at most 100 IDs per call. " +
+                      "Please split the request into multiple calls.",
+                  },
+                ],
+              };
+            }
             const result = await updateZulipMessageFlags(client, {
               messages: params.messageIds,
               op: "add",
@@ -2940,6 +2952,18 @@ const plugin = {
               return {
                 content: [
                   { type: "text", text: "Error: messageIds array is required for unstar." },
+                ],
+              };
+            }
+            if (params.messageIds.length > 100) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: messageIds array may contain at most 100 IDs per call. " +
+                      "Please split the request into multiple calls.",
+                  },
                 ],
               };
             }
@@ -2966,6 +2990,18 @@ const plugin = {
                 ],
               };
             }
+            if (params.messageIds.length > 100) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: messageIds array may contain at most 100 IDs per call. " +
+                      "Please split the request into multiple calls.",
+                  },
+                ],
+              };
+            }
             const result = await updateZulipMessageFlags(client, {
               messages: params.messageIds,
               op: "add",
@@ -2986,6 +3022,18 @@ const plugin = {
               return {
                 content: [
                   { type: "text", text: "Error: messageIds array is required for mark_unread." },
+                ],
+              };
+            }
+            if (params.messageIds.length > 100) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: messageIds array may contain at most 100 IDs per call. " +
+                      "Please split the request into multiple calls.",
+                  },
                 ],
               };
             }
@@ -3026,20 +3074,29 @@ const plugin = {
             let totalUpdated = 0;
             let done = false;
 
+            // Start from the oldest message and paginate forward
+            let anchor: number | "oldest" = "oldest";
+            let includeAnchor = true;
+
             // Process in batches since the API may not cover all messages in one call
             while (!done) {
               const result = await updateZulipMessageFlagsForNarrow(client, {
-                anchor: "oldest",
+                anchor,
                 numBefore: 0,
                 numAfter: 5000,
                 narrow,
                 op: "add",
                 flag: "read",
-                includeAnchor: true,
+                includeAnchor,
               });
               totalUpdated += result.updated_count;
               done = result.found_newest;
               if (result.processed_count === 0) break;
+              // Advance the anchor to page forward and avoid re-processing
+              if (!done && typeof result.last_processed_id === "number") {
+                anchor = result.last_processed_id;
+                includeAnchor = false;
+              }
             }
 
             const target = params.topic
