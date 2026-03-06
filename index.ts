@@ -52,6 +52,9 @@ import {
   getZulipUserProfileData,
   getProfileFieldTypeName,
   updateZulipOwnStatus,
+  updateZulipMessageFlags,
+  updateZulipMessageFlagsForNarrow,
+  getZulipReadReceipts,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -2829,6 +2832,316 @@ const plugin = {
                 {
                   type: "text",
                   text: `Custom profile data for user ${params.userId}:\n${lines.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_message_flags",
+      description:
+        "Manage personal message flags (star, read) and check read receipts in Zulip. " +
+        "Use to star/unstar important messages, mark messages or entire topics as read/unread, " +
+        "or check which users have read a specific message.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: [
+              "star",
+              "unstar",
+              "mark_read",
+              "mark_unread",
+              "mark_topic_read",
+              "read_receipts",
+            ],
+            description:
+              "Action to perform: " +
+              "'star' adds the starred flag to messages, " +
+              "'unstar' removes it, " +
+              "'mark_read' marks specific messages as read, " +
+              "'mark_unread' marks them as unread, " +
+              "'mark_topic_read' marks all messages in a stream/topic as read, " +
+              "'read_receipts' returns user IDs who have read a message.",
+          },
+          messageIds: {
+            type: "array",
+            items: { type: "number" },
+            description:
+              "Array of message IDs to operate on (for star/unstar/mark_read/mark_unread). " +
+              "Max 100 per call.",
+          },
+          messageId: {
+            type: "number",
+            description:
+              "Single message ID (for read_receipts).",
+          },
+          streamName: {
+            type: "string",
+            description:
+              "Stream name to mark as read (for mark_topic_read). " +
+              "If topic is also provided, only that topic is marked read.",
+          },
+          topic: {
+            type: "string",
+            description:
+              "Topic name within the stream (for mark_topic_read). " +
+              "If omitted, all messages in the stream are marked as read.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "star": {
+            if (!params.messageIds || params.messageIds.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "Error: messageIds array is required for star." },
+                ],
+              };
+            }
+            if (params.messageIds.length > 100) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: messageIds array may contain at most 100 IDs per call. " +
+                      "Please split the request into multiple calls.",
+                  },
+                ],
+              };
+            }
+            const result = await updateZulipMessageFlags(client, {
+              messages: params.messageIds,
+              op: "add",
+              flag: "starred",
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Starred ${result.messages.length} message(s) \u2B50 \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "unstar": {
+            if (!params.messageIds || params.messageIds.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "Error: messageIds array is required for unstar." },
+                ],
+              };
+            }
+            if (params.messageIds.length > 100) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: messageIds array may contain at most 100 IDs per call. " +
+                      "Please split the request into multiple calls.",
+                  },
+                ],
+              };
+            }
+            const result = await updateZulipMessageFlags(client, {
+              messages: params.messageIds,
+              op: "remove",
+              flag: "starred",
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Unstarred ${result.messages.length} message(s) \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "mark_read": {
+            if (!params.messageIds || params.messageIds.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "Error: messageIds array is required for mark_read." },
+                ],
+              };
+            }
+            if (params.messageIds.length > 100) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: messageIds array may contain at most 100 IDs per call. " +
+                      "Please split the request into multiple calls.",
+                  },
+                ],
+              };
+            }
+            const result = await updateZulipMessageFlags(client, {
+              messages: params.messageIds,
+              op: "add",
+              flag: "read",
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Marked ${result.messages.length} message(s) as read \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "mark_unread": {
+            if (!params.messageIds || params.messageIds.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "Error: messageIds array is required for mark_unread." },
+                ],
+              };
+            }
+            if (params.messageIds.length > 100) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: messageIds array may contain at most 100 IDs per call. " +
+                      "Please split the request into multiple calls.",
+                  },
+                ],
+              };
+            }
+            const result = await updateZulipMessageFlags(client, {
+              messages: params.messageIds,
+              op: "remove",
+              flag: "read",
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Marked ${result.messages.length} message(s) as unread \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "mark_topic_read": {
+            if (!params.streamName) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: streamName is required for mark_topic_read.",
+                  },
+                ],
+              };
+            }
+
+            const narrow: Array<{ operator: string; operand: string | number }> = [
+              { operator: "stream", operand: params.streamName },
+            ];
+            if (params.topic) {
+              narrow.push({ operator: "topic", operand: params.topic });
+            }
+
+            let totalUpdated = 0;
+            let done = false;
+
+            // Start from the oldest message and paginate forward
+            let anchor: number | "oldest" = "oldest";
+            let includeAnchor = true;
+
+            // Process in batches since the API may not cover all messages in one call
+            while (!done) {
+              const result = await updateZulipMessageFlagsForNarrow(client, {
+                anchor,
+                numBefore: 0,
+                numAfter: 5000,
+                narrow,
+                op: "add",
+                flag: "read",
+                includeAnchor,
+              });
+              totalUpdated += result.updated_count;
+              done = result.found_newest;
+              if (result.processed_count === 0) break;
+              // Advance the anchor to page forward and avoid re-processing
+              if (!done && typeof result.last_processed_id === "number") {
+                anchor = result.last_processed_id;
+                includeAnchor = false;
+              }
+            }
+
+            const target = params.topic
+              ? `#${params.streamName} > ${params.topic}`
+              : `#${params.streamName}`;
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Marked ${totalUpdated} message(s) as read in ${target} \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "read_receipts": {
+            if (!params.messageId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: messageId is required for read_receipts.",
+                  },
+                ],
+              };
+            }
+            const userIds = await getZulipReadReceipts(client, params.messageId);
+            if (userIds.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `No read receipts for message ${params.messageId} (read receipts may be disabled by the organization or no users have read it yet).`,
+                  },
+                ],
+              };
+            }
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Message ${params.messageId} has been read by ${userIds.length} user(s): ` +
+                    `${userIds.join(", ")} \u2705\n\n` +
+                    `Use zulip_users \u2192 get to look up user details by ID.`,
                 },
               ],
             };

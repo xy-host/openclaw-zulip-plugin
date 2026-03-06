@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Twelve tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
+Thirteen tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -245,6 +245,31 @@ Query server/organization info and custom profile fields. Actions:
 - Use `user_profile` with a user ID to read that user's custom profile field values — great for looking up team membership, roles, etc.
 - Fields of type "List of options" (type 3) show their available options in the `profile_fields` output
 - Fields marked with ⭐ are displayed in profile summaries
+
+### `zulip_message_flags`
+Manage personal message flags (star, read) and check read receipts. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `star` | `messageIds` | Add the starred flag to one or more messages |
+| `unstar` | `messageIds` | Remove the starred flag from messages |
+| `mark_read` | `messageIds` | Mark specific messages as read |
+| `mark_unread` | `messageIds` | Mark specific messages as unread |
+| `mark_topic_read` | `streamName` (+ optional `topic`) | Mark all messages in a stream or topic as read |
+| `read_receipts` | `messageId` | Get user IDs who have read a specific message |
+
+**Parameters**:
+- `messageIds` — Array of numeric message IDs (max 100 per call), for star/unstar/mark_read/mark_unread
+- `messageId` — Single message ID, for read_receipts
+- `streamName` — Stream name for mark_topic_read
+- `topic` — Optional topic filter for mark_topic_read; if omitted, the entire stream is marked read
+
+**Tips**:
+- Use `star` to bookmark important messages for later reference — starred messages appear in Zulip's "Starred messages" view
+- Use `mark_topic_read` with `streamName` + `topic` to efficiently clear unread counts for a conversation
+- Use `mark_topic_read` with only `streamName` (no topic) to mark an entire stream as read
+- `read_receipts` requires the organization to have read receipts enabled — if disabled, it returns an empty list
+- Use `zulip_messages` → `search` to find message IDs before starring or marking them
 
 ## Formatting (Zulip Markdown)
 
