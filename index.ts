@@ -68,6 +68,7 @@ import {
   muteZulipUser,
   unmuteZulipUser,
   updateZulipSubscriptionProperties,
+  type ZulipSubscriptionProperty,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -4119,7 +4120,7 @@ const plugin = {
               "'get' returns the current subscription settings for a stream, " +
               "'pin' pins the stream to the top of the sidebar, " +
               "'unpin' removes the pin, " +
-              "'mute' mutes the entire stream (no notifications for any topic), " +
+              "'mute' mutes the stream to minimize notifications (topic-level overrides and mentions may still notify), " +
               "'unmute' unmutes the stream, " +
               "'set_color' changes the stream's sidebar color, " +
               "'set_notifications' configures per-stream notification overrides.",
@@ -4202,8 +4203,8 @@ const plugin = {
 
         switch (params.action) {
           case "get": {
-            const colorDisplay = (sub as any).color ?? "(default)";
-            const pinned = (sub as any).pin_to_top === true;
+            const colorDisplay = sub.color ?? "(default)";
+            const pinned = sub.pin_to_top === true;
             const muted = sub.is_muted === true;
 
             const formatNotif = (val: unknown): string => {
@@ -4217,11 +4218,11 @@ const plugin = {
               `- Color: ${colorDisplay}`,
               `- Pinned: ${pinned ? "Yes 📌" : "No"}`,
               `- Muted: ${muted ? "Yes 🔇" : "No"}`,
-              `- Desktop notifications: ${formatNotif((sub as any).desktop_notifications)}`,
-              `- Push notifications: ${formatNotif((sub as any).push_notifications)}`,
-              `- Email notifications: ${formatNotif((sub as any).email_notifications)}`,
-              `- Audible notifications: ${formatNotif((sub as any).audible_notifications)}`,
-              `- Wildcard mentions notify: ${formatNotif((sub as any).wildcard_mentions_notify)}`,
+              `- Desktop notifications: ${formatNotif(sub.desktop_notifications)}`,
+              `- Push notifications: ${formatNotif(sub.push_notifications)}`,
+              `- Email notifications: ${formatNotif(sub.email_notifications)}`,
+              `- Audible notifications: ${formatNotif(sub.audible_notifications)}`,
+              `- Wildcard mentions notify: ${formatNotif(sub.wildcard_mentions_notify)}`,
             ];
             return {
               content: [{ type: "text", text: lines.join("\n") }],
@@ -4265,7 +4266,7 @@ const plugin = {
                 {
                   type: "text",
                   text: `Stream #${params.streamName} muted 🔇 ✅\n` +
-                    `No notifications will be sent for any topic in this stream.`,
+                    `This stream is muted; notifications are suppressed unless overridden by mentions or topic-level settings.`,
                 },
               ],
             };
@@ -4319,11 +4320,7 @@ const plugin = {
           }
 
           case "set_notifications": {
-            const properties: Array<{
-              stream_id: number;
-              property: string;
-              value: unknown;
-            }> = [];
+            const properties: ZulipSubscriptionProperty[] = [];
 
             if (params.desktopNotifications !== undefined) {
               properties.push({

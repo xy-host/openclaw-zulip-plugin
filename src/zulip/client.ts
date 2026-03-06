@@ -227,6 +227,12 @@ export type ZulipStream = {
 };
 
 export type ZulipSubscription = ZulipStream & {
+  pin_to_top?: boolean;
+  desktop_notifications?: boolean | null;
+  audible_notifications?: boolean | null;
+  push_notifications?: boolean | null;
+  email_notifications?: boolean | null;
+  wildcard_mentions_notify?: boolean | null;
   color: string;
   is_muted: boolean;
 };
@@ -1435,7 +1441,6 @@ export async function unmuteZulipUser(
 
 // ── Stream Subscription Properties ──
 
-export type ZulipStreamNotificationSetting = boolean | null;
 
 export type ZulipSubscriptionProperty = {
   stream_id: number;
