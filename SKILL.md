@@ -36,8 +36,17 @@ Manage streams. Actions:
 | `delete` | `streamId` |
 | `topics` | `streamId` |
 | `members` | `streamId` |
+| `subscribe_users` | `name`, `userIds` |
+| `unsubscribe_users` | `name`, `userIds` |
 
 **Note**: `create` and `join` use the same action — subscribing to a non-existent stream creates it.
+
+**Subscribe/Unsubscribe users**:
+- `subscribe_users` adds other users to a stream (requires admin or appropriate permissions)
+- `unsubscribe_users` removes other users from a stream (requires admin or appropriate permissions)
+- `userIds` is an array of numeric user IDs — use `zulip_users` → `list` to find them
+- `subscribe_users` also accepts optional `description` and `isPrivate` parameters (useful when creating a new stream and adding users at the same time)
+- The response shows how many users were subscribed vs. already subscribed
 
 ### `zulip_users`
 Look up and manage users. Actions:

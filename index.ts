@@ -8,6 +8,8 @@ import {
   listZulipSubscriptions,
   subscribeZulipStream,
   unsubscribeZulipStream,
+  subscribeUsersToZulipStream,
+  unsubscribeUsersFromZulipStream,
   getZulipStreamTopics,
   updateZulipStream,
   deleteZulipStream,
@@ -136,7 +138,7 @@ const plugin = {
       name: "zulip_streams",
       description:
         "List, create, join, leave, update, or delete Zulip streams/channels. " +
-        "Also list topics and members of a stream.",
+        "Also list topics and members of a stream, and subscribe/unsubscribe other users.",
       parameters: {
         type: "object",
         properties: {
@@ -157,6 +159,8 @@ const plugin = {
               "delete",
               "topics",
               "members",
+              "subscribe_users",
+              "unsubscribe_users",
             ],
             description: "Action to perform",
           },
@@ -174,7 +178,14 @@ const plugin = {
           },
           isPrivate: {
             type: "boolean",
-            description: "Whether the stream is private (for create/update)",
+            description: "Whether the stream is private (for create/update/subscribe_users)",
+          },
+          userIds: {
+            type: "array",
+            items: { type: "number" },
+            description:
+              "Array of user IDs to subscribe or unsubscribe (for subscribe_users/unsubscribe_users). " +
+              "Use zulip_users to find user IDs.",
           },
           newName: {
             type: "string",
@@ -332,6 +343,110 @@ const plugin = {
                 {
                   type: "text",
                   text: `Stream has ${members.length} members: ${members.join(", ")}`,
+                },
+              ],
+            };
+          }
+
+          case "subscribe_users": {
+            if (!params.name) {
+              return {
+                content: [{ type: "text", text: "Error: stream name is required." }],
+              };
+            }
+            if (!params.userIds || !Array.isArray(params.userIds) || params.userIds.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: userIds array with at least one user ID is required for subscribe_users.",
+                  },
+                ],
+              };
+            }
+            const invalidIds = params.userIds.filter(
+              (id: unknown) =>
+                typeof id !== "number" ||
+                !Number.isFinite(id) ||
+                !Number.isInteger(id) ||
+                (id as number) <= 0,
+            );
+            if (invalidIds.length > 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: invalid user ID(s): ${JSON.stringify(invalidIds)}. All IDs must be positive integers.`,
+                  },
+                ],
+              };
+            }
+            const uniqueUserIds = [...new Set(params.userIds as number[])];
+            const subResult = await subscribeUsersToZulipStream(client, {
+              name: params.name,
+              userIds: uniqueUserIds,
+              description: params.description,
+              isPrivate: params.isPrivate,
+            });
+            const subscribedCount = Object.values(subResult.subscribed ?? {}).flat().length;
+            const alreadyCount = Object.values(subResult.already_subscribed ?? {}).flat().length;
+            const parts: string[] = [];
+            if (subscribedCount > 0) {
+              parts.push(`subscribed ${subscribedCount} user(s)`);
+            }
+            if (alreadyCount > 0) {
+              parts.push(`${alreadyCount} already subscribed`);
+            }
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Stream **${params.name}**: ${parts.join(", ") || "no changes"} ✅`,
+                },
+              ],
+            };
+          }
+
+          case "unsubscribe_users": {
+            if (!params.name) {
+              return {
+                content: [{ type: "text", text: "Error: stream name is required." }],
+              };
+            }
+            if (!params.userIds || !Array.isArray(params.userIds) || params.userIds.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: userIds array with at least one user ID is required for unsubscribe_users.",
+                  },
+                ],
+              };
+            }
+            const invalidIds = params.userIds.filter(
+              (id: unknown) =>
+                typeof id !== "number" ||
+                !Number.isFinite(id) ||
+                !Number.isInteger(id) ||
+                (id as number) <= 0,
+            );
+            if (invalidIds.length > 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: invalid user ID(s): ${JSON.stringify(invalidIds)}. All IDs must be positive integers.`,
+                  },
+                ],
+              };
+            }
+            const uniqueUserIds = [...new Set(params.userIds as number[])];
+            await unsubscribeUsersFromZulipStream(client, params.name, uniqueUserIds);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Unsubscribed ${uniqueUserIds.length} user(s) from **${params.name}** ✅`,
                 },
               ],
             };

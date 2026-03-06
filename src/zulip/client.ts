@@ -257,18 +257,27 @@ export async function listZulipSubscriptions(
   return data.subscriptions ?? [];
 }
 
-export async function subscribeZulipStream(
+/**
+ * Shared helper for subscribing users to a stream.
+ * When principals is omitted, subscribes the bot itself.
+ * When principals is provided, subscribes the specified users.
+ */
+async function subscribeToStream(
   client: ZulipClient,
   params: {
     name: string;
     description?: string;
     isPrivate?: boolean;
+    principals?: number[];
   },
 ): Promise<{ already_subscribed: Record<string, string[]>; subscribed: Record<string, string[]> }> {
   const body = new URLSearchParams();
   const sub: Record<string, string> = { name: params.name };
   if (params.description) sub.description = params.description;
   body.set("subscriptions", JSON.stringify([sub]));
+  if (params.principals && params.principals.length > 0) {
+    body.set("principals", JSON.stringify(params.principals));
+  }
   if (params.isPrivate) body.set("invite_only", "true");
   const data = await client.request<{
     already_subscribed: Record<string, string[]>;
@@ -280,12 +289,65 @@ export async function subscribeZulipStream(
   return data;
 }
 
+export async function subscribeZulipStream(
+  client: ZulipClient,
+  params: {
+    name: string;
+    description?: string;
+    isPrivate?: boolean;
+  },
+): Promise<{ already_subscribed: Record<string, string[]>; subscribed: Record<string, string[]> }> {
+  return subscribeToStream(client, params);
+}
+
 export async function unsubscribeZulipStream(
   client: ZulipClient,
   streamName: string,
 ): Promise<void> {
   const body = new URLSearchParams();
   body.set("subscriptions", JSON.stringify([streamName]));
+  await client.request<{ result: string }>("/users/me/subscriptions", {
+    method: "DELETE",
+    body: body.toString(),
+  });
+}
+
+
+/**
+ * Subscribe one or more users (by user ID) to a stream.
+ * The bot must have permission to subscribe other users.
+ * Uses the `principals` parameter of POST /users/me/subscriptions.
+ */
+export async function subscribeUsersToZulipStream(
+  client: ZulipClient,
+  params: {
+    name: string;
+    userIds: number[];
+    description?: string;
+    isPrivate?: boolean;
+  },
+): Promise<{ already_subscribed: Record<string, string[]>; subscribed: Record<string, string[]> }> {
+  return subscribeToStream(client, {
+    name: params.name,
+    description: params.description,
+    isPrivate: params.isPrivate,
+    principals: params.userIds,
+  });
+}
+
+/**
+ * Unsubscribe one or more users (by user ID) from a stream.
+ * The bot must have permission to remove other users from streams.
+ * Uses the `principals` parameter of DELETE /users/me/subscriptions.
+ */
+export async function unsubscribeUsersFromZulipStream(
+  client: ZulipClient,
+  streamName: string,
+  userIds: number[],
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("subscriptions", JSON.stringify([streamName]));
+  body.set("principals", JSON.stringify(userIds));
   await client.request<{ result: string }>("/users/me/subscriptions", {
     method: "DELETE",
     body: body.toString(),
