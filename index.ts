@@ -68,6 +68,9 @@ import {
   muteZulipUser,
   unmuteZulipUser,
   updateZulipSubscriptionProperties,
+  listZulipAttachments,
+  deleteZulipAttachment,
+  getZulipUploadSpace,
   type ZulipSubscriptionProperty,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
@@ -4391,6 +4394,120 @@ const plugin = {
                   text:
                     `Notification settings updated for #${params.streamName} ✅\n` +
                     changes.join("\n"),
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_attachments",
+      description:
+        "List or delete uploaded file attachments in Zulip, and check upload space usage. " +
+        "Use to review files the bot has uploaded, clean up old attachments, or monitor storage usage. " +
+        "Complements the zulip_upload tool which handles uploading new files.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["list", "delete", "usage"],
+            description:
+              "Action to perform: " +
+              "'list' returns all files uploaded by the bot with their IDs, names, sizes, and linked messages; " +
+              "'delete' removes an uploaded file by its attachment ID; " +
+              "'usage' returns the total upload space used by the bot.",
+          },
+          attachmentId: {
+            type: "number",
+            description:
+              "Attachment ID to delete (for delete action). Use 'list' to find attachment IDs.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "list": {
+            const attachments = await listZulipAttachments(client);
+            if (attachments.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "No uploaded attachments found." },
+                ],
+              };
+            }
+            const lines = attachments.map((a) => {
+              const sizeKB = (a.size / 1024).toFixed(1);
+              const date = new Date(a.create_time * 1000).toISOString();
+              const msgCount = a.messages?.length ?? 0;
+              const msgInfo = msgCount > 0
+                ? ` (referenced in ${msgCount} message${msgCount > 1 ? "s" : ""})`
+                : " (not referenced in any message)";
+              return `- **[${a.id}]** ${a.name} — ${sizeKB} KB, uploaded ${date}${msgInfo}`;
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${attachments.length} attachment(s):\n\n${lines.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "delete": {
+            if (!params.attachmentId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: attachmentId is required for delete. Use 'list' to find attachment IDs.",
+                  },
+                ],
+              };
+            }
+            await deleteZulipAttachment(client, params.attachmentId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Attachment ${params.attachmentId} deleted \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "usage": {
+            const { uploadSpaceUsed } = await getZulipUploadSpace(client);
+            const usedMB = (uploadSpaceUsed / (1024 * 1024)).toFixed(2);
+            const usedKB = (uploadSpaceUsed / 1024).toFixed(1);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `**Upload space usage**\n` +
+                    `- Used: ${uploadSpaceUsed >= 1024 * 1024 ? `${usedMB} MB` : `${usedKB} KB`} ` +
+                    `(${uploadSpaceUsed.toLocaleString()} bytes)\n\n` +
+                    `Use 'list' to see all uploaded files and 'delete' to remove unused attachments.`,
                 },
               ],
             };
