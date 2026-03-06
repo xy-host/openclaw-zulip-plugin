@@ -48,8 +48,6 @@ import {
   reorderZulipLinkifiers,
   getZulipUserStatus,
   updateZulipOwnStatus,
-  getZulipUserStatus,
-  updateZulipOwnStatus,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 

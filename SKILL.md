@@ -213,19 +213,18 @@ Get or set user status (emoji + text) in Zulip. User status appears next to the 
 
 | Action | Required params | Description |
 |---|---|---|
-| `get` | `userId` | Get a user's current status (text, emoji, away flag) |
-| `set` | at least one of: `statusText`, `emojiName`, `away` | Set the bot's own status |
+| `get` | `userId` | Get the status (text + emoji) set by a specific user |
+| `set` | `statusText` and/or `emojiName` | Set the bot's own status |
 | `clear` | — | Clear the bot's status entirely |
 
 **Set parameters**:
 - `statusText` — Status text to display (max 60 characters), e.g. "In a meeting", "On vacation"
 - `emojiName` — Emoji name without colons, e.g. `calendar`, `palm_tree`, `hammer_and_wrench`
-- `away` — Boolean; when true, marks the user as unavailable regardless of actual presence
 
 **Tips**:
-- Use `get` with a user ID to check if someone is away or has set a status
+- Use `get` to check what someone is up to before messaging them
 - Use `set` to update the bot's own status — useful for indicating what the bot is working on
-- Use `clear` to remove the bot's status text, emoji, and away flag
+- Use `clear` to remove the bot's status entirely
 - The `emojiName` can be a standard Unicode emoji name or a custom emoji name (use `zulip_custom_emoji` list to find available custom emoji)
 - Status text is limited to 60 characters
 
