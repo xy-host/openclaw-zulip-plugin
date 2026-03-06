@@ -10,7 +10,7 @@ Guide for interacting with Zulip via the openclaw-zulip-plugin tools.
 
 ## Tools
 
-Ten tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
+Eleven tools are available. All tools accept an optional `accountId` parameter for multi-account setups:
 
 ### `zulip_send`
 Send a message to a stream or DM.
@@ -206,6 +206,28 @@ List, add, update, remove, or reorder linkifiers (auto-linking patterns) in the 
 - Patterns use re2 regex syntax (not PCRE) — some advanced features like backreferences are not available
 - The order of linkifiers matters when patterns overlap — use `reorder` to prioritize
 - Use `list` to find `filterId` values before updating or removing
+
+
+### `zulip_user_status`
+Get or set user status (emoji + text) in Zulip. User status appears next to the user's name. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `get` | `userId` | Get a user's current status (text, emoji, away flag) |
+| `set` | at least one of: `statusText`, `emojiName`, `away` | Set the bot's own status |
+| `clear` | — | Clear the bot's status entirely |
+
+**Set parameters**:
+- `statusText` — Status text to display (max 60 characters), e.g. "In a meeting", "On vacation"
+- `emojiName` — Emoji name without colons, e.g. `calendar`, `palm_tree`, `hammer_and_wrench`
+- `away` — Boolean; when true, marks the user as unavailable regardless of actual presence
+
+**Tips**:
+- Use `get` with a user ID to check if someone is away or has set a status
+- Use `set` to update the bot's own status — useful for indicating what the bot is working on
+- Use `clear` to remove the bot's status text, emoji, and away flag
+- The `emojiName` can be a standard Unicode emoji name or a custom emoji name (use `zulip_custom_emoji` list to find available custom emoji)
+- Status text is limited to 60 characters
 
 ## Formatting (Zulip Markdown)
 
