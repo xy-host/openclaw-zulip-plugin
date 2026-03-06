@@ -1225,3 +1225,52 @@ export async function getZulipReadReceipts(
   }>(`/messages/${messageId}/read_receipts`);
   return data.user_ids ?? [];
 }
+
+// ── Alert Words ──
+
+/**
+ * Get the list of alert words configured for the bot user.
+ * Alert words trigger notifications when any message contains one of these words.
+ */
+export async function listZulipAlertWords(
+  client: ZulipClient,
+): Promise<string[]> {
+  const data = await client.request<{ alert_words: string[]; result: string }>(
+    "/users/me/alert_words",
+  );
+  return data.alert_words ?? [];
+}
+
+/**
+ * Add new alert words for the bot user.
+ * Returns the full updated list of alert words.
+ */
+export async function addZulipAlertWords(
+  client: ZulipClient,
+  words: string[],
+): Promise<string[]> {
+  const body = new URLSearchParams();
+  body.set("alert_words", JSON.stringify(words));
+  const data = await client.request<{ alert_words: string[]; result: string }>(
+    "/users/me/alert_words",
+    { method: "POST", body: body.toString() },
+  );
+  return data.alert_words ?? [];
+}
+
+/**
+ * Remove alert words for the bot user.
+ * Returns the full updated list of alert words.
+ */
+export async function removeZulipAlertWords(
+  client: ZulipClient,
+  words: string[],
+): Promise<string[]> {
+  const body = new URLSearchParams();
+  body.set("alert_words", JSON.stringify(words));
+  const data = await client.request<{ alert_words: string[]; result: string }>(
+    "/users/me/alert_words",
+    { method: "DELETE", body: body.toString() },
+  );
+  return data.alert_words ?? [];
+}

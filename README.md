@@ -102,6 +102,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_user_status` | Get or update user status (text and emoji) shown next to user names |
 | `zulip_server_settings` | Query server info, list custom profile fields, get user profile data |
 | `zulip_message_flags` | Star/unstar messages, mark read/unread, check read receipts |
+| `zulip_alert_words` | List, add, or remove alert words that trigger notifications on keyword matches |
 
 ## Configuration
 
