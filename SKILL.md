@@ -71,12 +71,13 @@ Search, fetch, edit, delete messages, manage emoji reactions, and view edit hist
 
 | Action | Required params | Description |
 |---|---|---|
-| `get` | `messageId` | Fetch a single message by ID with full details |
-| `search` | (see filters below) | Search/retrieve messages with optional filters |
+| `get` | `messageId` | Fetch a single message by ID with full details and reaction summary |
+| `search` | (see filters below) | Search/retrieve messages with optional filters (includes reaction summaries) |
 | `edit` | `messageId` + `content` and/or `newTopic` | Edit a message the bot sent |
 | `delete` | `messageId` | Delete a message the bot sent |
 | `add_reaction` | `messageId`, `emojiName` | Add an emoji reaction to a message |
 | `remove_reaction` | `messageId`, `emojiName` | Remove an emoji reaction from a message |
+| `reactions` | `messageId` | List all reactions on a message with emoji names, counts, and user IDs |
 | `history` | `messageId` | View the edit history of a message (all past versions and changes) |
 
 **Search filters** (all optional, combine as needed):
@@ -99,6 +100,12 @@ Search, fetch, edit, delete messages, manage emoji reactions, and view edit hist
 - **Page forwards from a message**: `anchor="<messageId>", before=0, after=20, includeAnchor=false`
 - The response includes pagination hints with the IDs needed to fetch the next/previous page
 
+**Reactions action**:
+- Returns all reactions on a message, grouped by emoji
+- For each emoji, shows the count and the user IDs of everyone who reacted with it
+- Use `zulip_users` → `get` to look up user details from the returned user IDs
+- The `get` and `search` actions also include a compact reaction summary in their output (e.g. `:thumbs_up: ×3  :eyes: ×1`)
+
 **History action**:
 - Returns all past versions of a message in chronological order
 - The first entry is the original message; subsequent entries show each edit
@@ -112,7 +119,8 @@ Search, fetch, edit, delete messages, manage emoji reactions, and view edit hist
 - `edit` and `delete` only work on messages the bot has permission to modify (typically its own messages)
 - When editing a topic, use `propagateMode` to control how the rename applies: `change_one` (default), `change_later`, or `change_all`
 - `emojiName` should be without colons, e.g. `thumbs_up`, `check`, `eyes`, `tada`
-- Use `get` to fetch full message details including content, sender info, and reactions
+- Use `get` to fetch full message details including content, sender info, and a reaction summary
+- Use `reactions` to see detailed reaction data including which users reacted with each emoji
 - Use `history` to see all past versions of a message — useful for auditing edits or understanding how a conversation evolved
 
 ### `zulip_scheduled_messages`
