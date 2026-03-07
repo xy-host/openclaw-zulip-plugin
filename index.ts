@@ -113,23 +113,34 @@ function formatUserDetails(user: {
     .join("\n");
 }
 
+/**
+ * Group reactions by emoji name, returning a Map of emoji → user IDs.
+ * Shared helper used by both the compact summary formatter and the
+ * detailed reactions action.
+ */
+function groupReactionsByEmoji(
+  reactions: Array<{ emoji_name: string; user_id: number }>,
+): Map<string, number[]> {
+  const groups = new Map<string, number[]>();
+  for (const r of reactions) {
+    const existing = groups.get(r.emoji_name);
+    if (existing) {
+      existing.push(r.user_id);
+    } else {
+      groups.set(r.emoji_name, [r.user_id]);
+    }
+  }
+  return groups;
+}
+
 function formatReactionSummary(
   reactions?: Array<{ emoji_name: string; user_id: number }>,
 ): string {
   if (!reactions || reactions.length === 0) return "";
-  // Group reactions by emoji and count them
-  const counts = new Map<string, number[]>();
-  for (const r of reactions) {
-    const existing = counts.get(r.emoji_name);
-    if (existing) {
-      existing.push(r.user_id);
-    } else {
-      counts.set(r.emoji_name, [r.user_id]);
-    }
-  }
+  const groups = groupReactionsByEmoji(reactions);
   const parts: string[] = [];
-  for (const [emoji, userIds] of counts) {
-    parts.push(`:${emoji}: ×${userIds.length}`);
+  for (const [emoji, userIds] of groups) {
+    parts.push(`:${emoji}: \u00d7${userIds.length}`);
   }
   return parts.join("  ");
 }
@@ -844,7 +855,7 @@ const plugin = {
         "Search, fetch, edit, delete Zulip messages, manage reactions, and view edit history. " +
         "Use to retrieve message history from streams/topics/DMs, look up a specific message, " +
         "edit or delete messages the bot has sent, add/remove emoji reactions, " +
-        "list all reactions on a message with user details, " +
+        "list all reactions on a message (emoji names, counts, and reacting user IDs), " +
         "or view the edit history of a message to see past versions and changes.",
       parameters: {
         type: "object",
@@ -1225,9 +1236,7 @@ const plugin = {
               };
             }
             const msg = await getZulipSingleMessage(client, params.messageId);
-            const reactions = (msg as any).reactions as
-              | Array<{ emoji_name: string; emoji_code: string; reaction_type: string; user_id: number }>
-              | undefined;
+            const reactions = msg.reactions;
             if (!reactions || reactions.length === 0) {
               return {
                 content: [
@@ -1239,16 +1248,8 @@ const plugin = {
               };
             }
 
-            // Group by emoji
-            const groups = new Map<string, number[]>();
-            for (const r of reactions) {
-              const existing = groups.get(r.emoji_name);
-              if (existing) {
-                existing.push(r.user_id);
-              } else {
-                groups.set(r.emoji_name, [r.user_id]);
-              }
-            }
+            // Use shared grouping helper
+            const groups = groupReactionsByEmoji(reactions);
 
             const lines: string[] = [];
             for (const [emoji, userIds] of groups) {
@@ -1264,7 +1265,7 @@ const plugin = {
                   text:
                     `Reactions on message ${params.messageId} (${reactions.length} total):\n\n` +
                     lines.join("\n") +
-                    "\n\nUse zulip_users → get to look up user details by ID.",
+                    "\n\nUse zulip_users \u2192 get to look up user details by ID.",
                 },
               ],
             };
