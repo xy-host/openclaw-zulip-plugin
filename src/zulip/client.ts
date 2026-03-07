@@ -135,6 +135,15 @@ export async function getZulipProfile(client: ZulipClient): Promise<ZulipProfile
   return data;
 }
 
+/**
+ * Get the full user object for the currently authenticated user (the bot itself).
+ * Returns the same ZulipUser shape as getZulipUser but for the bot's own account.
+ */
+export async function getZulipOwnUser(client: ZulipClient): Promise<ZulipUser> {
+  const data = await client.request<{ result: string } & ZulipUser>("/users/me");
+  return data;
+}
+
 export async function registerZulipEventQueue(
   client: ZulipClient,
 ): Promise<ZulipEventQueueRegistration> {
