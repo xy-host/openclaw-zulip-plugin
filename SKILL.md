@@ -421,6 +421,28 @@ List, delete, or check storage usage for uploaded file attachments. Complements 
 - Use `delete` to clean up old or unused attachments and free storage space
 - This tool manages files already uploaded; use `zulip_upload` to upload new files
 
+
+### `zulip_typing`
+Send typing indicators in Zulip conversations. Use to signal that the bot is working on a response, especially during long-running tasks. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `start` | one of: `streamName`+`topic`, `userId`, or `userIds` | Start showing the typing indicator (auto-expires after ~15s) |
+| `stop` | one of: `streamName`+`topic`, `userId`, or `userIds` | Immediately hide the typing indicator |
+
+**Target parameters** (mutually exclusive — provide exactly one):
+- `streamName` + `topic` — show typing in a stream topic
+- `userId` — show typing in a 1:1 DM (numeric user ID)
+- `userIds` — show typing in a group DM/huddle (array of at least 2 numeric user IDs)
+
+**Tips**:
+- Typing indicators auto-expire after about 15 seconds — send `start` periodically for longer operations
+- Use `stop` to immediately clear the typing indicator when the bot finishes processing
+- Typing indicators are visual cues only — they do not block message delivery
+- The bot must be a participant in the conversation to show typing indicators
+- For stream typing, you need both `streamName` and `topic` — typing indicators are topic-specific in Zulip
+- Use `zulip_users` → `list` to find user IDs for DM typing indicators
+
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:
