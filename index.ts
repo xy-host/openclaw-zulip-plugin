@@ -74,6 +74,7 @@ import {
   listZulipUserTopics,
   type ZulipSubscriptionProperty,
   sendZulipTyping,
+  getZulipOwnUser,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -633,8 +634,9 @@ const plugin = {
     api.registerTool({
       name: "zulip_users",
       description:
-        "List, look up, or check presence of Zulip users. " +
-        "Use to find user IDs for DMs, look up user details, or check who is online.",
+        "List, look up, or check presence of Zulip users, or get the bot's own user info. " +
+        "Use to find user IDs for DMs, look up user details, check who is online, " +
+        "or discover the bot's own user ID and profile.",
       parameters: {
         type: "object",
         properties: {
@@ -645,7 +647,7 @@ const plugin = {
           },
           action: {
             type: "string",
-            enum: ["list", "get", "get_by_email", "presence"],
+            enum: ["list", "get", "get_by_email", "presence", "get_own_user"],
             description: "Action to perform",
           },
           userId: {
@@ -781,6 +783,18 @@ const plugin = {
                 {
                   type: "text",
                   text: `Presence for user ${params.userId}:\n${lines.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "get_own_user": {
+            const ownUser = await getZulipOwnUser(client);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: formatUserDetails(ownUser),
                 },
               ],
             };
