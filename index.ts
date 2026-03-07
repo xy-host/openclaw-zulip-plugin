@@ -75,6 +75,10 @@ import {
   type ZulipSubscriptionProperty,
   sendZulipTyping,
   getZulipOwnUser,
+  listZulipSavedSnippets,
+  createZulipSavedSnippet,
+  editZulipSavedSnippet,
+  deleteZulipSavedSnippet,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -4972,6 +4976,179 @@ const plugin = {
         }
       },
     });
+
+    api.registerTool({
+      name: "zulip_saved_snippets",
+      description:
+        "List, create, edit, or delete saved snippets in Zulip. " +
+        "Saved snippets are reusable text templates that can be quickly inserted into messages. " +
+        "Use to manage frequently used responses, welcome messages, standard replies, " +
+        "or any text the bot needs to reuse across conversations. " +
+        "Requires Zulip 10.0+ (feature level 297).",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["list", "create", "edit", "delete"],
+            description: "Action to perform",
+          },
+          snippetId: {
+            type: "number",
+            description:
+              "Saved snippet ID (for edit/delete). Use 'list' to find snippet IDs.",
+          },
+          title: {
+            type: "string",
+            description:
+              "Title of the saved snippet (for create/edit). " +
+              "Should be a short, descriptive label for the snippet, e.g. 'Welcome message', 'FAQ: pricing'.",
+          },
+          content: {
+            type: "string",
+            description:
+              "Content of the saved snippet in Zulip markdown format (for create/edit). " +
+              "This is the text that will be inserted when the snippet is used. " +
+              "Supports full Zulip markdown including bold, lists, links, code blocks, etc.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "list": {
+            const snippets = await listZulipSavedSnippets(client);
+            if (snippets.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "No saved snippets found." },
+                ],
+              };
+            }
+            const lines = snippets.map((s) => {
+              const date = new Date(s.date_created * 1000).toISOString();
+              const preview =
+                s.content.length > 200
+                  ? s.content.slice(0, 200) + "\u2026"
+                  : s.content;
+              return `- **[${s.id}]** **${s.title}** (created: ${date})\n  ${preview}`;
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${snippets.length} saved snippet(s):\n\n${lines.join("\n\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "create": {
+            if (!params.title) {
+              return {
+                content: [
+                  { type: "text", text: "Error: title is required for create." },
+                ],
+              };
+            }
+            if (!params.content) {
+              return {
+                content: [
+                  { type: "text", text: "Error: content is required for create." },
+                ],
+              };
+            }
+            const result = await createZulipSavedSnippet(client, {
+              title: params.title,
+              content: params.content,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Saved snippet created (id:${result.saved_snippet_id}) \u2705\n` +
+                    `Title: **${params.title}**`,
+                },
+              ],
+            };
+          }
+
+          case "edit": {
+            if (!params.snippetId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: snippetId is required for edit. Use 'list' to find snippet IDs.",
+                  },
+                ],
+              };
+            }
+            if (!params.title && !params.content) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide title and/or content to edit.",
+                  },
+                ],
+              };
+            }
+            await editZulipSavedSnippet(client, params.snippetId, {
+              title: params.title,
+              content: params.content,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Saved snippet ${params.snippetId} updated \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "delete": {
+            if (!params.snippetId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: snippetId is required for delete. Use 'list' to find snippet IDs.",
+                  },
+                ],
+              };
+            }
+            await deleteZulipSavedSnippet(client, params.snippetId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Saved snippet ${params.snippetId} deleted \u2705`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
   },
 };
 

@@ -107,6 +107,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_attachments` | List, delete uploaded file attachments, and check upload space usage |
 | `zulip_user_preferences` | Mute, unmute, follow, or reset topic visibility; manage muted users |
 | `zulip_typing` | Send typing indicators in stream topics, 1:1 DMs, or group DMs |
+| `zulip_saved_snippets` | List, create, edit, or delete reusable text snippets (Zulip 10.0+) |
 
 ## Configuration
 
