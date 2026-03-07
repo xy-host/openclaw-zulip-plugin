@@ -106,6 +106,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_stream_settings` | View and update per-stream subscription settings: pin, mute, color, and notification overrides |
 | `zulip_attachments` | List, delete uploaded file attachments, and check upload space usage |
 | `zulip_user_preferences` | Mute, unmute, follow, or reset topic visibility; manage muted users |
+| `zulip_typing` | Send typing indicators in stream topics, 1:1 DMs, or group DMs |
 
 ## Configuration
 
