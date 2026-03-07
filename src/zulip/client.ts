@@ -1592,3 +1592,91 @@ export async function getZulipMessageHistory(
   }>(`/messages/${messageId}/history`);
   return data.message_history ?? [];
 }
+
+// ── Saved Snippets ──
+
+export type ZulipSavedSnippet = {
+  id: number;
+  title: string;
+  content: string;
+  date_created: number;
+};
+
+/**
+ * Get all saved snippets for the current user.
+ * Saved snippets are reusable text templates that can be quickly inserted into messages.
+ *
+ * Requires Zulip 10.0+ (feature level 297).
+ */
+export async function listZulipSavedSnippets(
+  client: ZulipClient,
+): Promise<ZulipSavedSnippet[]> {
+  const data = await client.request<{
+    saved_snippets: ZulipSavedSnippet[];
+    result: string;
+  }>("/saved_snippets");
+  return data.saved_snippets ?? [];
+}
+
+/**
+ * Create a new saved snippet for the current user.
+ * Returns the ID of the newly created snippet.
+ *
+ * Requires Zulip 10.0+ (feature level 297).
+ */
+export async function createZulipSavedSnippet(
+  client: ZulipClient,
+  params: {
+    title: string;
+    content: string;
+  },
+): Promise<{ saved_snippet_id: number }> {
+  const body = new URLSearchParams();
+  body.set("title", params.title);
+  body.set("content", params.content);
+  const data = await client.request<{
+    saved_snippet_id: number;
+    result: string;
+  }>("/saved_snippets", {
+    method: "POST",
+    body: body.toString(),
+  });
+  return { saved_snippet_id: data.saved_snippet_id };
+}
+
+/**
+ * Edit an existing saved snippet for the current user.
+ *
+ * Requires Zulip 10.0+ (feature level 368).
+ */
+export async function editZulipSavedSnippet(
+  client: ZulipClient,
+  snippetId: number,
+  params: {
+    title?: string;
+    content?: string;
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  if (params.title !== undefined) body.set("title", params.title);
+  if (params.content !== undefined) body.set("content", params.content);
+  await client.request<{ result: string }>(
+    `/saved_snippets/${snippetId}`,
+    { method: "PATCH", body: body.toString() },
+  );
+}
+
+/**
+ * Delete a saved snippet.
+ *
+ * Requires Zulip 10.0+ (feature level 297).
+ */
+export async function deleteZulipSavedSnippet(
+  client: ZulipClient,
+  snippetId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/saved_snippets/${snippetId}`,
+    { method: "DELETE" },
+  );
+}

@@ -445,6 +445,28 @@ Send typing indicators in Zulip conversations. Use to signal that the bot is wor
 - For stream typing, you need both `streamName` and `topic` — typing indicators are topic-specific in Zulip
 - Use `zulip_users` → `list` to find user IDs for DM typing indicators
 
+
+### `zulip_saved_snippets`
+List, create, edit, or delete saved snippets. Saved snippets are reusable text templates that can be quickly inserted into messages — useful for frequently used responses, welcome messages, or standard replies. Requires Zulip 10.0+. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `list` | — | List all saved snippets with their IDs, titles, and content previews |
+| `create` | `title`, `content` | Create a new saved snippet |
+| `edit` | `snippetId` (+ `title` and/or `content`) | Update a saved snippet's title or content. Requires Zulip server feature level 368+ for this action. |
+| `delete` | `snippetId` | Delete a saved snippet |
+
+**Parameters**:
+- `title` — short descriptive label for the snippet (e.g. "Welcome message", "FAQ: pricing")
+- `content` — the snippet's text in Zulip markdown format (supports bold, lists, links, code blocks, etc.)
+- `snippetId` — numeric snippet ID (for edit/delete). Use `list` to find IDs.
+
+**Tips**:
+- Use snippets to store standardized responses that the bot reuses across conversations
+- Content supports full Zulip markdown — including code blocks, links, and formatting
+- Use `list` to browse all saved snippets and find their IDs
+- When editing, you can update just the title, just the content, or both
+
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:
