@@ -4784,7 +4784,24 @@ const plugin = {
         const cfg = api.runtime.config.loadConfig();
         const client = getClient(cfg, params.accountId);
 
-        const op = params.action === "stop" ? "stop" : "start";
+        let op: "start" | "stop";
+        switch (params.action) {
+          case "start":
+            op = "start";
+            break;
+          case "stop":
+            op = "stop";
+            break;
+          default:
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Unknown action: ${params.action}`,
+                },
+              ],
+            };
+        }
 
         // Validate mutual exclusivity of target parameters
         const targetCount = [params.streamName, params.userId, params.userIds].filter(
