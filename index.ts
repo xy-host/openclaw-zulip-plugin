@@ -4984,7 +4984,7 @@ const plugin = {
         "Saved snippets are reusable text templates that can be quickly inserted into messages. " +
         "Use to manage frequently used responses, welcome messages, standard replies, " +
         "or any text the bot needs to reuse across conversations. " +
-        "Requires Zulip 10.0+ (feature level 297).",
+        "Requires Zulip 10.0+ (feature level 297); the 'edit' action requires feature level 368.",
       parameters: {
         type: "object",
         properties: {

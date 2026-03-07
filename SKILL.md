@@ -453,7 +453,7 @@ List, create, edit, or delete saved snippets. Saved snippets are reusable text t
 |---|---|---|
 | `list` | — | List all saved snippets with their IDs, titles, and content previews |
 | `create` | `title`, `content` | Create a new saved snippet |
-| `edit` | `snippetId` (+ `title` and/or `content`) | Update a saved snippet's title or content |
+| `edit` | `snippetId` (+ `title` and/or `content`) | Update a saved snippet's title or content. Requires Zulip server feature level 368+ for this action. |
 | `delete` | `snippetId` | Delete a saved snippet |
 
 **Parameters**:
