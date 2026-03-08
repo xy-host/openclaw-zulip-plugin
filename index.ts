@@ -981,7 +981,7 @@ const plugin = {
             description:
               "Filter to only DM messages (for search). When true, narrows to all DM conversations " +
               "(both 1:1 and group). Use dmUserId or dmUserIds instead for a specific conversation. " +
-              "Mutually exclusive with streamName.",
+              "Mutually exclusive with streamName, dmUserId, and dmUserIds.",
           },
         },
         required: ["action"],
@@ -1016,8 +1016,7 @@ const plugin = {
             const hasDmUserFilter = params.dmUserId !== undefined;
             const hasDmUsersFilter = Array.isArray(params.dmUserIds) && params.dmUserIds.length > 0;
             const hasDmFilter = params.isDm === true;
-            const dmFilterCount = [hasStreamFilter, hasDmUserFilter, hasDmUsersFilter, hasDmFilter].filter(Boolean).length;
-            if (dmFilterCount > 1 && (hasStreamFilter && (hasDmUserFilter || hasDmUsersFilter || hasDmFilter))) {
+            if (hasStreamFilter && (hasDmUserFilter || hasDmUsersFilter || hasDmFilter)) {
               return {
                 content: [
                   {
@@ -1033,6 +1032,16 @@ const plugin = {
                   {
                     type: "text",
                     text: "Error: dmUserId, dmUserIds, and isDm are mutually exclusive. Use only one DM filter.",
+                  },
+                ],
+              };
+            }
+            if (params.topic && (hasDmUserFilter || hasDmUsersFilter || hasDmFilter)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: topic cannot be combined with DM filters (dmUserId, dmUserIds, isDm). DMs do not have topics in Zulip.",
                   },
                 ],
               };

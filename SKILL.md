@@ -85,7 +85,7 @@ Search, fetch, edit, delete messages, manage emoji reactions, and view edit hist
 - `topic` — filter by topic within the stream
 - `dmUserId` — filter to a 1:1 DM conversation with this user ID (mutually exclusive with `streamName` and `dmUserIds`)
 - `dmUserIds` — filter to a group DM (huddle) with these user IDs; must include all participants including the bot's own user ID (mutually exclusive with `streamName` and `dmUserId`)
-- `isDm` — when `true`, filter to all DM conversations (both 1:1 and group); mutually exclusive with `streamName`
+- `isDm` — when `true`, filter to all DM conversations (both 1:1 and group); mutually exclusive with `streamName`, `dmUserId`, and `dmUserIds`
 - `senderId` — filter by sender user ID
 - `query` — free-text search (supports Zulip search operators)
 - `limit` — max results (default: 20, max: 100)
