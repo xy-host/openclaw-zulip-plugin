@@ -3350,6 +3350,7 @@ const plugin = {
               "mark_read",
               "mark_unread",
               "mark_topic_read",
+              "mark_all_read",
               "read_receipts",
             ],
             description:
@@ -3359,6 +3360,7 @@ const plugin = {
               "'mark_read' marks specific messages as read, " +
               "'mark_unread' marks them as unread, " +
               "'mark_topic_read' marks all messages in a stream/topic as read, " +
+              "'mark_all_read' marks all messages as read for the current bot account, " +
               "'read_receipts' returns user IDs who have read a message.",
           },
           messageIds: {
@@ -3588,6 +3590,43 @@ const plugin = {
                 {
                   type: "text",
                   text: `Marked ${totalUpdated} message(s) as read in ${target} \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "mark_all_read": {
+            let totalUpdatedAll = 0;
+            let doneAll = false;
+
+            // Use an empty narrow to match all messages visible to this user/bot
+            let anchorAll: number | "oldest" = "oldest";
+            let includeAnchorAll = true;
+
+            while (!doneAll) {
+              const result = await updateZulipMessageFlagsForNarrow(client, {
+                anchor: anchorAll,
+                numBefore: 0,
+                numAfter: 5000,
+                narrow: [],
+                op: "add",
+                flag: "read",
+                includeAnchor: includeAnchorAll,
+              });
+              totalUpdatedAll += result.updated_count;
+              doneAll = result.found_newest;
+              if (result.processed_count === 0) break;
+              if (!doneAll && typeof result.last_processed_id === "number") {
+                anchorAll = result.last_processed_id;
+                includeAnchorAll = false;
+              }
+            }
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Marked ${totalUpdatedAll} message(s) as read for the current account \u2705`,
                 },
               ],
             };
