@@ -313,6 +313,7 @@ Manage personal message flags (star, read) and check read receipts. Actions:
 | `mark_read` | `messageIds` | Mark specific messages as read |
 | `mark_unread` | `messageIds` | Mark specific messages as unread |
 | `mark_topic_read` | `streamName` (+ optional `topic`) | Mark all messages in a stream or topic as read |
+| `mark_all_read` | — | Mark all messages across the entire organization as read |
 | `read_receipts` | `messageId` | Get user IDs who have read a specific message |
 
 **Parameters**:
@@ -323,6 +324,7 @@ Manage personal message flags (star, read) and check read receipts. Actions:
 
 **Tips**:
 - Use `star` to bookmark important messages for later reference — starred messages appear in Zulip's "Starred messages" view
+- Use `mark_all_read` to clear all unread counts across the entire organization in one action — useful for inbox-zero workflows or after extended absence
 - Use `mark_topic_read` with `streamName` + `topic` to efficiently clear unread counts for a conversation
 - Use `mark_topic_read` with only `streamName` (no topic) to mark an entire stream as read
 - `read_receipts` requires the organization to have read receipts enabled — if disabled, it returns an empty list

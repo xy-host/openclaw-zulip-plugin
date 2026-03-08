@@ -101,7 +101,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_linkifiers` | List, add, update, remove, or reorder auto-linking patterns (linkifiers) |
 | `zulip_user_status` | Get or update user status (text and emoji) shown next to user names |
 | `zulip_server_settings` | Query server info, list custom profile fields, get user profile data |
-| `zulip_message_flags` | Star/unstar messages, mark read/unread, check read receipts |
+| `zulip_message_flags` | Star/unstar messages, mark read/unread, mark all as read, check read receipts |
 | `zulip_alert_words` | List, add, or remove alert words that trigger notifications on keyword matches |
 | `zulip_stream_settings` | View and update per-stream subscription settings: pin, mute, color, and notification overrides |
 | `zulip_attachments` | List, delete uploaded file attachments, and check upload space usage |
