@@ -853,12 +853,10 @@ const plugin = {
       name: "zulip_messages",
       description:
         "Search, fetch, edit, delete Zulip messages, manage reactions, and view edit history. " +
-        "Also forward messages to other conversations with attribution. " +
         "Use to retrieve message history from streams/topics/DMs, look up a specific message, " +
         "edit or delete messages the bot has sent, add/remove emoji reactions, " +
         "list all reactions on a message (emoji names, counts, and reacting user IDs), " +
-        "view the edit history of a message to see past versions and changes, " +
-        "or forward a message to another stream/topic or DM with sender attribution. " +
+        "or view the edit history of a message to see past versions and changes. " +
         "Supports DM conversation search: use dmUserId for 1:1 DM history, " +
         "dmUserIds for group DM (huddle) history, or isDm to search across all DMs.",
       parameters: {
@@ -880,13 +878,12 @@ const plugin = {
               "remove_reaction",
               "reactions",
               "history",
-              "forward",
             ],
             description: "Action to perform",
           },
           messageId: {
             type: "number",
-            description: "Message ID (for get/edit/delete/add_reaction/remove_reaction/reactions/history/forward)",
+            description: "Message ID (for get/edit/delete/add_reaction/remove_reaction/reactions/history)",
           },
           query: {
             type: "string",
@@ -985,25 +982,6 @@ const plugin = {
               "Filter to only DM messages (for search). When true, narrows to all DM conversations " +
               "(both 1:1 and group). Use dmUserId or dmUserIds instead for a specific conversation. " +
               "Mutually exclusive with streamName, dmUserId, and dmUserIds.",
-          },
-          forwardTo: {
-            type: "string",
-            description:
-              "Target for forwarding a message (for forward action). " +
-              "For streams: provide the stream name (also set forwardTopic). " +
-              "For DMs: provide as 'dm:<userId>' (e.g. 'dm:12345').",
-          },
-          forwardTopic: {
-            type: "string",
-            description:
-              "Topic in the target stream to forward the message to (for forward action, when forwarding to a stream). " +
-              "If omitted when forwarding to a stream, defaults to '(no topic)'.",
-          },
-          includeAttribution: {
-            type: "boolean",
-            description:
-              "Whether to include attribution header when forwarding (for forward action, default: true). " +
-              "When true, the forwarded message includes the original sender, timestamp, and location.",
           },
         },
         required: ["action"],
@@ -1462,106 +1440,6 @@ const plugin = {
                 },
               ],
             };
-          }
-
-          case "forward": {
-            if (!params.messageId) {
-              return {
-                content: [
-                  {
-                    type: "text",
-                    text: "Error: messageId is required for forward.",
-                  },
-                ],
-              };
-            }
-            if (!params.forwardTo) {
-              return {
-                content: [
-                  {
-                    type: "text",
-                    text: "Error: forwardTo is required for forward. " +
-                      "Provide a stream name (with optional forwardTopic) or \"dm:<userId>\" for a DM.",
-                  },
-                ],
-              };
-            }
-
-            // Fetch the original message
-            const origMsg = await getZulipSingleMessage(client, params.messageId);
-            const origDate = new Date(origMsg.timestamp * 1000).toISOString();
-            const origLocation =
-              origMsg.type === "stream"
-                ? `#**${typeof origMsg.display_recipient === "string" ? origMsg.display_recipient : "?"}>${origMsg.subject}**`
-                : "a DM";
-
-            // Build forwarded content with optional attribution
-            const includeAttribution = params.includeAttribution !== false;
-            let forwardContent: string;
-            if (includeAttribution) {
-              forwardContent =
-                `**Forwarded message** from **${origMsg.sender_full_name}** ` +
-                `(${origDate}) in ${origLocation}:\n` +
-                `\n---\n\n` +
-                origMsg.content;
-            } else {
-              forwardContent = origMsg.content;
-            }
-
-            // Determine target
-            const forwardToTrimmed = params.forwardTo.trim();
-            const isDmTarget =
-              forwardToTrimmed.toLowerCase().startsWith("dm:") ||
-              forwardToTrimmed.toLowerCase().startsWith("user:");
-            if (isDmTarget) {
-              const prefix = forwardToTrimmed.indexOf(":");
-              const rawId = forwardToTrimmed.slice(prefix + 1).trim();
-              const userId = Number(rawId);
-              if (!Number.isFinite(userId) || userId <= 0) {
-                return {
-                  content: [
-                    {
-                      type: "text",
-                      text: "Error: forwardTo DM target must be a valid positive user ID (e.g. \"dm:12345\").",
-                    },
-                  ],
-                };
-              }
-              const fwdResult = await sendZulipApiMessage(client, {
-                type: "direct",
-                to: JSON.stringify([userId]),
-                content: forwardContent,
-              });
-              return {
-                content: [
-                  {
-                    type: "text",
-                    text:
-                      `Forwarded message ${params.messageId} to DM with user ${userId} ` +
-                      `(new message id:${fwdResult.id}) \u2705`,
-                  },
-                ],
-              };
-            } else {
-              // Stream target
-              const topic = params.forwardTopic ?? "(no topic)";
-              const fwdResult = await sendZulipApiMessage(client, {
-                type: "stream",
-                to: forwardToTrimmed,
-                topic,
-                content: forwardContent,
-              });
-              return {
-                content: [
-                  {
-                    type: "text",
-                    text:
-                      `Forwarded message ${params.messageId} to #${forwardToTrimmed} > ${topic} ` +
-                      `(new message id:${fwdResult.id}) \u2705`,
-                  },
-                ],
-              };
-            }
           }
 
           default:

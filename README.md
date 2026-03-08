@@ -91,7 +91,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_streams` | List, create, join, leave, update, delete streams; list topics and members; subscribe/unsubscribe users |
 | `zulip_send` | Send messages to streams (with topic), 1:1 DMs, or group DMs (huddles) |
 | `zulip_users` | List users, look up by ID or email, check presence status, get bot's own profile |
-| `zulip_messages` | Search/fetch messages (streams, DMs, group DMs), edit/delete bot messages, add/remove emoji reactions, view edit history |
+| `zulip_messages` | Search/fetch messages (streams, DMs, group DMs), edit/delete bot messages, add/remove emoji reactions, view edit history, forward messages with attribution |
 | `zulip_scheduled_messages` | Create, list, edit, or delete scheduled messages for future delivery |
 | `zulip_user_groups` | List, create, update, delete user groups and manage group members |
 | `zulip_custom_emoji` | List, upload, or deactivate custom emoji in the organization |
