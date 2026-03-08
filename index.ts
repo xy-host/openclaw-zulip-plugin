@@ -853,7 +853,6 @@ const plugin = {
       name: "zulip_messages",
       description:
         "Search, fetch, edit, delete Zulip messages, manage reactions, and view edit history. " +
-        "Also forward messages to other conversations with attribution. " +
         "Use to retrieve message history from streams/topics/DMs, look up a specific message, " +
         "edit or delete messages the bot has sent, add/remove emoji reactions, " +
         "list all reactions on a message (emoji names, counts, and reacting user IDs), " +
@@ -1510,9 +1509,7 @@ const plugin = {
 
             // Determine target
             const forwardToTrimmed = params.forwardTo.trim();
-            const isDmTarget =
-              forwardToTrimmed.toLowerCase().startsWith("dm:") ||
-              forwardToTrimmed.toLowerCase().startsWith("user:");
+            const isDmTarget = forwardToTrimmed.toLowerCase().startsWith("dm:");
             if (isDmTarget) {
               const prefix = forwardToTrimmed.indexOf(":");
               const rawId = forwardToTrimmed.slice(prefix + 1).trim();
