@@ -856,7 +856,9 @@ const plugin = {
         "Use to retrieve message history from streams/topics/DMs, look up a specific message, " +
         "edit or delete messages the bot has sent, add/remove emoji reactions, " +
         "list all reactions on a message (emoji names, counts, and reacting user IDs), " +
-        "or view the edit history of a message to see past versions and changes.",
+        "or view the edit history of a message to see past versions and changes. " +
+        "Supports DM conversation search: use dmUserId for 1:1 DM history, " +
+        "dmUserIds for group DM (huddle) history, or isDm to search across all DMs.",
       parameters: {
         type: "object",
         properties: {
@@ -959,6 +961,28 @@ const plugin = {
             description:
               "Emoji name without colons (for add_reaction/remove_reaction), e.g. 'thumbs_up', 'check', 'eyes'",
           },
+          dmUserId: {
+            type: "number",
+            description:
+              "Filter messages to a 1:1 DM conversation with this user ID (for search). " +
+              "Adds a 'dm' narrow to show only messages between the bot and this user. " +
+              "Mutually exclusive with streamName and dmUserIds.",
+          },
+          dmUserIds: {
+            type: "array",
+            items: { type: "number" },
+            description:
+              "Filter messages to a group DM (huddle) with these user IDs (for search). " +
+              "Must include all participants in the huddle (including the bot's own user ID). " +
+              "Mutually exclusive with streamName and dmUserId.",
+          },
+          isDm: {
+            type: "boolean",
+            description:
+              "Filter to only DM messages (for search). When true, narrows to all DM conversations " +
+              "(both 1:1 and group). Use dmUserId or dmUserIds instead for a specific conversation. " +
+              "Mutually exclusive with streamName.",
+          },
         },
         required: ["action"],
       },
@@ -987,12 +1011,78 @@ const plugin = {
           }
 
           case "search": {
+            // Validate mutual exclusivity of stream vs DM filters
+            const hasStreamFilter = Boolean(params.streamName);
+            const hasDmUserFilter = params.dmUserId !== undefined;
+            const hasDmUsersFilter = Array.isArray(params.dmUserIds) && params.dmUserIds.length > 0;
+            const hasDmFilter = params.isDm === true;
+            const dmFilterCount = [hasStreamFilter, hasDmUserFilter, hasDmUsersFilter, hasDmFilter].filter(Boolean).length;
+            if (dmFilterCount > 1 && (hasStreamFilter && (hasDmUserFilter || hasDmUsersFilter || hasDmFilter))) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: streamName cannot be combined with dmUserId, dmUserIds, or isDm. Use one conversation filter type.",
+                  },
+                ],
+              };
+            }
+            if ([hasDmUserFilter, hasDmUsersFilter, hasDmFilter].filter(Boolean).length > 1) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: dmUserId, dmUserIds, and isDm are mutually exclusive. Use only one DM filter.",
+                  },
+                ],
+              };
+            }
+
             const narrow: Array<{ operator: string; operand: string | number }> = [];
             if (params.streamName) {
               narrow.push({ operator: "stream", operand: params.streamName });
             }
             if (params.topic) {
               narrow.push({ operator: "topic", operand: params.topic });
+            }
+            if (params.dmUserId !== undefined) {
+              const dmId = Number(params.dmUserId);
+              if (!Number.isFinite(dmId) || !Number.isInteger(dmId) || dmId <= 0) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: "Error: dmUserId must be a valid positive integer.",
+                    },
+                  ],
+                };
+              }
+              narrow.push({ operator: "dm", operand: String(dmId) });
+            }
+            if (Array.isArray(params.dmUserIds) && params.dmUserIds.length > 0) {
+              const invalidIds = params.dmUserIds.filter(
+                (id: unknown) =>
+                  typeof id !== "number" ||
+                  !Number.isFinite(id) ||
+                  !Number.isInteger(id) ||
+                  (id as number) <= 0,
+              );
+              if (invalidIds.length > 0) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: invalid user ID(s) in dmUserIds: ${JSON.stringify(invalidIds)}. All IDs must be positive integers.`,
+                    },
+                  ],
+                };
+              }
+              // Zulip dm narrow with multiple users: comma-separated user IDs
+              const uniqueIds = [...new Set(params.dmUserIds as number[])];
+              narrow.push({ operator: "dm", operand: uniqueIds.join(",") });
+            }
+            if (params.isDm === true) {
+              narrow.push({ operator: "is", operand: "dm" });
             }
             if (params.senderId) {
               narrow.push({ operator: "sender", operand: params.senderId });

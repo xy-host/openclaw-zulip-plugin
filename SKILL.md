@@ -83,6 +83,9 @@ Search, fetch, edit, delete messages, manage emoji reactions, and view edit hist
 **Search filters** (all optional, combine as needed):
 - `streamName` — filter by stream
 - `topic` — filter by topic within the stream
+- `dmUserId` — filter to a 1:1 DM conversation with this user ID (mutually exclusive with `streamName` and `dmUserIds`)
+- `dmUserIds` — filter to a group DM (huddle) with these user IDs; must include all participants including the bot's own user ID (mutually exclusive with `streamName` and `dmUserId`)
+- `isDm` — when `true`, filter to all DM conversations (both 1:1 and group); mutually exclusive with `streamName`
 - `senderId` — filter by sender user ID
 - `query` — free-text search (supports Zulip search operators)
 - `limit` — max results (default: 20, max: 100)
@@ -113,7 +116,10 @@ Search, fetch, edit, delete messages, manage emoji reactions, and view edit hist
 - Requires the organization to have edit history enabled (most Zulip servers have this on by default)
 
 **Tips**:
-- Use `search` with `streamName` + `topic` to get recent message history for a conversation
+- Use `search` with `streamName` + `topic` to get recent message history for a stream conversation
+- Use `search` with `dmUserId` to get recent message history for a 1:1 DM conversation
+- Use `search` with `dmUserIds` to get message history for a group DM (huddle) — include all participant IDs including the bot's own ID (use `zulip_users` → `get_own_user` to find it)
+- Use `search` with `isDm: true` to search across all DM conversations at once
 - Use `search` with `query` for full-text search across all accessible messages
 - Pagination info is included in search results showing whether older/newer messages exist and how to fetch them
 - `edit` and `delete` only work on messages the bot has permission to modify (typically its own messages)
