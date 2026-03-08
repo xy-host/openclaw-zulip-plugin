@@ -153,7 +153,7 @@ Create, list, edit, or delete scheduled messages. Actions:
 - `topic` — topic within the stream (for stream messages; if omitted, defaults to "(no topic)" — always provide a topic)
 - `userId` — target user ID for DM (mutually exclusive with `streamName`)
 - `content` — message content in Zulip markdown
-- `scheduledAt` — ISO 8601 datetime string for delivery, e.g. `2025-12-31T09:00:00Z` (must be in the future)
+- `scheduledAt` — ISO 8601 datetime string for delivery, e.g. `2099-12-31T09:00:00Z` (must be in the future)
 
 **Tips**:
 - Use `list` to see all pending scheduled messages with their IDs
@@ -504,14 +504,14 @@ List, create, or delete message reminders. Reminders schedule a Notification Bot
 
 **Create parameters**:
 - `messageId` — the ID of the message to set a reminder for (the reminder will link back to this message)
-- `scheduledAt` — ISO 8601 datetime for when the reminder should be delivered, e.g. `2025-12-31T09:00:00Z` (must be in the future)
+- `scheduledAt` — ISO 8601 datetime for when the reminder should be delivered, e.g. `2099-12-31T09:00:00Z` (must be in the future)
 - `note` — optional note text included in the Notification Bot message (requires feature level 415)
 
 **Tips**:
 - Use `list` to see all pending reminders and find their IDs
 - Failed reminders (shown with ❌) indicate the server tried to send but failed — you can delete and recreate them
 - Use `zulip_messages` → `search` to find message IDs to set reminders for
-- Reminders are delivered by Notification Bot as a DM to the bot user, linking back to the original message
+- Reminders are delivered from Notification Bot as a DM to this account (the current bot), with a link back to the original message
 - Use reminders to create follow-up workflows: search for a message, set a reminder for later review
 
 ## Formatting (Zulip Markdown)

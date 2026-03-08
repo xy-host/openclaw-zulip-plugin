@@ -1621,7 +1621,7 @@ const plugin = {
             type: "string",
             description:
               "ISO 8601 datetime string for when the message should be sent (for create/edit), " +
-              "e.g. '2025-12-31T09:00:00Z'. Must be in the future.",
+              "e.g. '2099-12-31T09:00:00Z'. Must be in the future.",
           },
         },
         required: ["action"],
@@ -5529,7 +5529,7 @@ const plugin = {
             type: "string",
             description:
               "ISO 8601 datetime string for when the reminder should be delivered (for create), " +
-              "e.g. '2025-12-31T09:00:00Z'. Must be in the future.",
+              "e.g. '2099-12-31T09:00:00Z'. Must be in the future.",
           },
           note: {
             type: "string",
@@ -5595,7 +5595,7 @@ const plugin = {
                 content: [
                   {
                     type: "text",
-                    text: "Error: scheduledAt is required for create (ISO 8601 datetime, e.g. '2025-12-31T09:00:00Z').",
+                    text: "Error: scheduledAt is required for create (ISO 8601 datetime, e.g. '2099-12-31T09:00:00Z').",
                   },
                 ],
               };
