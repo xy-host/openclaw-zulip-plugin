@@ -3360,7 +3360,7 @@ const plugin = {
               "'mark_read' marks specific messages as read, " +
               "'mark_unread' marks them as unread, " +
               "'mark_topic_read' marks all messages in a stream/topic as read, " +
-              "'mark_all_read' marks all messages across the entire organization as read, " +
+              "'mark_all_read' marks all messages as read for the current bot account, " +
               "'read_receipts' returns user IDs who have read a message.",
           },
           messageIds: {
@@ -3599,7 +3599,7 @@ const plugin = {
             let totalUpdatedAll = 0;
             let doneAll = false;
 
-            // Use an empty narrow to match all messages across the organization
+            // Use an empty narrow to match all messages visible to this user/bot
             let anchorAll: number | "oldest" = "oldest";
             let includeAnchorAll = true;
 
@@ -3626,7 +3626,7 @@ const plugin = {
               content: [
                 {
                   type: "text",
-                  text: `Marked ${totalUpdatedAll} message(s) as read across all streams and DMs \u2705`,
+                  text: `Marked ${totalUpdatedAll} message(s) as read for the current account \u2705`,
                 },
               ],
             };
