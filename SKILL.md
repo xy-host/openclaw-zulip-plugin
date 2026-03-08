@@ -67,7 +67,7 @@ Look up and manage users. Actions:
 - Use `get_own_user` to discover the bot's own user ID — useful when you need to exclude the bot from user lists, check its profile, or pass its ID to other actions
 
 ### `zulip_messages`
-Search, fetch, edit, delete messages, manage emoji reactions, and view edit history. Actions:
+Search, fetch, edit, delete, forward messages, manage emoji reactions, and view edit history. Actions:
 
 | Action | Required params | Description |
 |---|---|---|
@@ -79,6 +79,7 @@ Search, fetch, edit, delete messages, manage emoji reactions, and view edit hist
 | `remove_reaction` | `messageId`, `emojiName` | Remove an emoji reaction from a message |
 | `reactions` | `messageId` | List all reactions on a message with emoji names, counts, and user IDs |
 | `history` | `messageId` | View the edit history of a message (all past versions and changes) |
+| `forward` | `messageId`, `forwardTo` (+ optional `forwardTopic`) | Forward a message to another stream/topic or DM with sender attribution |
 
 **Search filters** (all optional, combine as needed):
 - `streamName` — filter by stream
@@ -128,6 +129,14 @@ Search, fetch, edit, delete messages, manage emoji reactions, and view edit hist
 - Use `get` to fetch full message details including content, sender info, and a reaction summary
 - Use `reactions` to see detailed reaction data including which users reacted with each emoji
 - Use `history` to see all past versions of a message — useful for auditing edits or understanding how a conversation evolved
+
+**Forward action**:
+- Fetches the original message and re-sends it to a different stream/topic or DM
+- By default, includes an attribution header with the original sender name, timestamp, and source location
+- Set `includeAttribution: false` to forward just the raw content without the header
+- `forwardTo` accepts a stream name (pair with `forwardTopic`) or `"dm:<userId>"` for a DM
+- The forwarded message is sent as a new message by the bot — it is not a Zulip "move"
+- Useful for cross-posting important messages, creating digests, or routing information between teams
 
 ### `zulip_scheduled_messages`
 Create, list, edit, or delete scheduled messages. Actions:
