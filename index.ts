@@ -79,6 +79,9 @@ import {
   createZulipSavedSnippet,
   editZulipSavedSnippet,
   deleteZulipSavedSnippet,
+  listZulipReminders,
+  createZulipReminder,
+  deleteZulipReminder,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -5475,6 +5478,190 @@ const plugin = {
                 {
                   type: "text",
                   text: `Saved snippet ${params.snippetId} deleted \u2705`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_reminders",
+      description:
+        "List, create, or delete message reminders in Zulip. " +
+        "Reminders schedule a Notification Bot message to the current user at a future time, " +
+        "linking back to a specific message. Use to set follow-up reminders on important messages, " +
+        "create 'snooze' workflows, or schedule self-notifications about conversations. " +
+        "Requires Zulip 11.0+ (feature level 399 for list/delete, 381 for create).",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["list", "create", "delete"],
+            description: "Action to perform",
+          },
+          reminderId: {
+            type: "number",
+            description:
+              "Reminder ID (for delete). Use 'list' to find reminder IDs.",
+          },
+          messageId: {
+            type: "number",
+            description:
+              "Message ID to set a reminder for (for create). " +
+              "The reminder will link back to this message when delivered.",
+          },
+          scheduledAt: {
+            type: "string",
+            description:
+              "ISO 8601 datetime string for when the reminder should be delivered (for create), " +
+              "e.g. '2025-12-31T09:00:00Z'. Must be in the future.",
+          },
+          note: {
+            type: "string",
+            description:
+              "Optional note to include with the reminder (for create). " +
+              "This text is shown in the Notification Bot message alongside the link to the original message. " +
+              "Requires Zulip 11.0+ (feature level 415).",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "list": {
+            const reminders = await listZulipReminders(client);
+            if (reminders.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "No pending reminders found." },
+                ],
+              };
+            }
+            const lines = reminders.map((r) => {
+              const deliverAt = new Date(
+                r.scheduled_delivery_timestamp * 1000,
+              ).toISOString();
+              const preview =
+                r.content.length > 200
+                  ? r.content.slice(0, 200) + "\u2026"
+                  : r.content;
+              const status = r.failed ? " \u274C FAILED" : "";
+              const msgRef = r.reminder_target_message_id
+                ? ` (message: ${r.reminder_target_message_id})`
+                : "";
+              return `- **[${r.reminder_id}]** at ${deliverAt}${msgRef}${status}\n  ${preview}`;
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `${reminders.length} pending reminder(s):\n\n${lines.join("\n\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "create": {
+            if (!params.messageId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: messageId is required for create. Provide the ID of the message to set a reminder for.",
+                  },
+                ],
+              };
+            }
+            if (!params.scheduledAt) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: scheduledAt is required for create (ISO 8601 datetime, e.g. '2025-12-31T09:00:00Z').",
+                  },
+                ],
+              };
+            }
+            const deliverTimestamp = Math.floor(
+              new Date(params.scheduledAt).getTime() / 1000,
+            );
+            if (isNaN(deliverTimestamp) || deliverTimestamp <= 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: scheduledAt is not a valid datetime.",
+                  },
+                ],
+              };
+            }
+            if (deliverTimestamp <= Math.floor(Date.now() / 1000)) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: scheduledAt must be in the future.",
+                  },
+                ],
+              };
+            }
+
+            const result = await createZulipReminder(client, {
+              messageId: params.messageId,
+              scheduledDeliveryTimestamp: deliverTimestamp,
+              note: params.note,
+            });
+            const deliverAt = new Date(
+              deliverTimestamp * 1000,
+            ).toISOString();
+            const noteInfo = params.note ? ` with note: "${params.note}"` : "";
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Reminder created (id:${result.reminder_id}) for message ${params.messageId} ` +
+                    `at ${deliverAt}${noteInfo} \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "delete": {
+            if (!params.reminderId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: reminderId is required for delete. Use 'list' to find reminder IDs.",
+                  },
+                ],
+              };
+            }
+            await deleteZulipReminder(client, params.reminderId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Reminder ${params.reminderId} deleted \u2705`,
                 },
               ],
             };

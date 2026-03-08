@@ -1680,3 +1680,76 @@ export async function deleteZulipSavedSnippet(
     { method: "DELETE" },
   );
 }
+
+// ── Message Reminders ──
+
+export type ZulipReminder = {
+  reminder_id: number;
+  type: string;
+  to: number[];
+  content: string;
+  rendered_content: string;
+  scheduled_delivery_timestamp: number;
+  failed: boolean;
+  reminder_target_message_id: number;
+};
+
+/**
+ * Get all undelivered reminders for the current user.
+ * Returns reminders ordered by scheduled_delivery_timestamp (ascending).
+ *
+ * Requires Zulip 11.0+ (feature level 399).
+ */
+export async function listZulipReminders(
+  client: ZulipClient,
+): Promise<ZulipReminder[]> {
+  const data = await client.request<{
+    reminders: ZulipReminder[];
+    result: string;
+  }>("/reminders");
+  return data.reminders ?? [];
+}
+
+/**
+ * Create a message reminder for the current user.
+ * The reminder will be sent via Notification Bot at the specified time.
+ *
+ * Requires Zulip 11.0+ (feature level 381).
+ * The `note` parameter requires feature level 415.
+ */
+export async function createZulipReminder(
+  client: ZulipClient,
+  params: {
+    messageId: number;
+    scheduledDeliveryTimestamp: number;
+    note?: string;
+  },
+): Promise<{ reminder_id: number }> {
+  const body = new URLSearchParams();
+  body.set("message_id", String(params.messageId));
+  body.set("scheduled_delivery_timestamp", String(params.scheduledDeliveryTimestamp));
+  if (params.note !== undefined) body.set("note", params.note);
+  const data = await client.request<{
+    reminder_id: number;
+    result: string;
+  }>("/reminders", {
+    method: "POST",
+    body: body.toString(),
+  });
+  return { reminder_id: data.reminder_id };
+}
+
+/**
+ * Delete a scheduled reminder.
+ *
+ * Requires Zulip 11.0+ (feature level 399).
+ */
+export async function deleteZulipReminder(
+  client: ZulipClient,
+  reminderId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/reminders/${reminderId}`,
+    { method: "DELETE" },
+  );
+}
