@@ -1753,3 +1753,161 @@ export async function deleteZulipReminder(
     { method: "DELETE" },
   );
 }
+
+// ── Invitations ──
+
+export type ZulipInvite = {
+  id: number;
+  invited_by_user_id: number;
+  email?: string;
+  is_multiuse: boolean;
+  link?: string;
+  invite_as: number;
+  stream_ids: number[];
+  invited: number;
+  expiry_date: number | null;
+  status: number;
+};
+
+/**
+ * Human-friendly labels for the invite_as role values.
+ */
+export const INVITE_AS_LABELS: Record<number, string> = {
+  100: "Organization owner",
+  200: "Organization administrator",
+  300: "Organization moderator",
+  400: "Member",
+  600: "Guest",
+};
+
+/**
+ * List all unexpired invitations (both email invitations and reusable
+ * invitation links) that the current user has permission to manage.
+ */
+export async function listZulipInvites(
+  client: ZulipClient,
+): Promise<ZulipInvite[]> {
+  const data = await client.request<{
+    invites: ZulipInvite[];
+    result: string;
+  }>("/invites");
+  return data.invites ?? [];
+}
+
+/**
+ * Send individual email invitations.
+ * Requires appropriate permissions (typically admin or member with invite permission).
+ */
+export async function sendZulipInvites(
+  client: ZulipClient,
+  params: {
+    inviteeEmails: string;
+    streamIds: number[];
+    inviteAs?: number;
+    inviteExpiresInMinutes?: number | null;
+    includeRealmDefaultSubscriptions?: boolean;
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("invitee_emails", params.inviteeEmails);
+  body.set("stream_ids", JSON.stringify(params.streamIds));
+  if (params.inviteAs !== undefined) {
+    body.set("invite_as", String(params.inviteAs));
+  }
+  if (params.inviteExpiresInMinutes !== undefined) {
+    body.set(
+      "invite_expires_in_minutes",
+      params.inviteExpiresInMinutes === null ? "null" : String(params.inviteExpiresInMinutes),
+    );
+  }
+  if (params.includeRealmDefaultSubscriptions !== undefined) {
+    body.set(
+      "include_realm_default_subscriptions",
+      String(params.includeRealmDefaultSubscriptions),
+    );
+  }
+  await client.request<{ result: string }>("/invites", {
+    method: "POST",
+    body: body.toString(),
+  });
+}
+
+/**
+ * Create a reusable invitation link.
+ * Returns the invitation link URL.
+ * Requires appropriate permissions (typically admin, or member with invite permission since Zulip 8.0).
+ */
+export async function createZulipInviteLink(
+  client: ZulipClient,
+  params: {
+    streamIds: number[];
+    inviteAs?: number;
+    inviteExpiresInMinutes?: number | null;
+    includeRealmDefaultSubscriptions?: boolean;
+  },
+): Promise<{ invite_link: string }> {
+  const body = new URLSearchParams();
+  body.set("stream_ids", JSON.stringify(params.streamIds));
+  if (params.inviteAs !== undefined) {
+    body.set("invite_as", String(params.inviteAs));
+  }
+  if (params.inviteExpiresInMinutes !== undefined) {
+    body.set(
+      "invite_expires_in_minutes",
+      params.inviteExpiresInMinutes === null ? "null" : String(params.inviteExpiresInMinutes),
+    );
+  }
+  if (params.includeRealmDefaultSubscriptions !== undefined) {
+    body.set(
+      "include_realm_default_subscriptions",
+      String(params.includeRealmDefaultSubscriptions),
+    );
+  }
+  const data = await client.request<{
+    invite_link: string;
+    result: string;
+  }>("/invites/multiuse", {
+    method: "POST",
+    body: body.toString(),
+  });
+  return { invite_link: data.invite_link };
+}
+
+/**
+ * Revoke (delete) an email invitation by its invite ID.
+ */
+export async function revokeZulipInvite(
+  client: ZulipClient,
+  inviteId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/invites/${inviteId}`,
+    { method: "DELETE" },
+  );
+}
+
+/**
+ * Revoke (delete) a reusable invitation link by its invite ID.
+ */
+export async function revokeZulipInviteLink(
+  client: ZulipClient,
+  inviteId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/invites/multiuse/${inviteId}`,
+    { method: "DELETE" },
+  );
+}
+
+/**
+ * Resend an email invitation by its invite ID.
+ */
+export async function resendZulipInvite(
+  client: ZulipClient,
+  inviteId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/invites/${inviteId}/resend`,
+    { method: "POST" },
+  );
+}

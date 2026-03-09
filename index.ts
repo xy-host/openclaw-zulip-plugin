@@ -82,6 +82,13 @@ import {
   listZulipReminders,
   createZulipReminder,
   deleteZulipReminder,
+  listZulipInvites,
+  sendZulipInvites,
+  createZulipInviteLink,
+  revokeZulipInvite,
+  revokeZulipInviteLink,
+  resendZulipInvite,
+  INVITE_AS_LABELS,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -5662,6 +5669,311 @@ const plugin = {
                 {
                   type: "text",
                   text: `Reminder ${params.reminderId} deleted \u2705`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_invitations",
+      description:
+        "Manage Zulip organization invitations: list pending invitations, send email invitations, " +
+        "create reusable invitation links, revoke invitations, and resend email invitations. " +
+        "Use to onboard new users, manage access to the organization, or audit pending invites. " +
+        "Requires appropriate permissions (typically admin or member with invite permission).",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["list", "send", "create_link", "revoke", "revoke_link", "resend"],
+            description:
+              "Action to perform: " +
+              "'list' returns all unexpired invitations (email and reusable links), " +
+              "'send' sends email invitations to specified email addresses, " +
+              "'create_link' generates a reusable invitation link that multiple users can use, " +
+              "'revoke' cancels an email invitation, " +
+              "'revoke_link' cancels a reusable invitation link, " +
+              "'resend' resends an email invitation.",
+          },
+          inviteId: {
+            type: "number",
+            description:
+              "Invitation ID (for revoke/revoke_link/resend). Use 'list' to find invitation IDs.",
+          },
+          emails: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Array of email addresses to invite (for send action). " +
+              "Each must be a valid email address.",
+          },
+          streamIds: {
+            type: "array",
+            items: { type: "number" },
+            description:
+              "Array of stream IDs to auto-subscribe invited users to (for send/create_link). " +
+              "Use zulip_streams list_all to find stream IDs.",
+          },
+          inviteAs: {
+            type: "number",
+            enum: [100, 200, 300, 400, 600],
+            description:
+              "Organization role for invited users (for send/create_link): " +
+              "100 = Organization owner, 200 = Organization administrator, " +
+              "300 = Organization moderator, 400 = Member (default), 600 = Guest. " +
+              "You can only invite with roles equal or stricter than your own.",
+          },
+          expiresInMinutes: {
+            type: ["number", "null"],
+            description:
+              "Number of minutes before the invitation expires (for send/create_link). " +
+              "Use null for invitations that never expire. " +
+              "If omitted, uses the server default (typically 10 days / 14400 minutes).",
+          },
+          includeDefaultSubscriptions: {
+            type: "boolean",
+            description:
+              "Whether invited users should also be subscribed to the organization's default streams (for send/create_link). " +
+              "Defaults to true if omitted.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "list": {
+            const invites = await listZulipInvites(client);
+            if (invites.length === 0) {
+              return {
+                content: [
+                  { type: "text", text: "No unexpired invitations found." },
+                ],
+              };
+            }
+
+            const emailInvites = invites.filter((inv) => !inv.is_multiuse);
+            const linkInvites = invites.filter((inv) => inv.is_multiuse);
+
+            const sections: string[] = [];
+
+            if (emailInvites.length > 0) {
+              const lines = emailInvites.map((inv) => {
+                const role = INVITE_AS_LABELS[inv.invite_as] ?? `Role ${inv.invite_as}`;
+                const created = new Date(inv.invited * 1000).toISOString();
+                const expires = inv.expiry_date
+                  ? new Date(inv.expiry_date * 1000).toISOString()
+                  : "Never";
+                return (
+                  `- **[${inv.id}]** ${inv.email ?? "(no email)"} — ` +
+                  `${role}, created: ${created}, expires: ${expires}`
+                );
+              });
+              sections.push(
+                `**Email invitations** (${emailInvites.length}):\n${lines.join("\n")}`,
+              );
+            }
+
+            if (linkInvites.length > 0) {
+              const lines = linkInvites.map((inv) => {
+                const role = INVITE_AS_LABELS[inv.invite_as] ?? `Role ${inv.invite_as}`;
+                const created = new Date(inv.invited * 1000).toISOString();
+                const expires = inv.expiry_date
+                  ? new Date(inv.expiry_date * 1000).toISOString()
+                  : "Never";
+                const linkDisplay = inv.link ? ` — ${inv.link}` : "";
+                return (
+                  `- **[${inv.id}]** Reusable link${linkDisplay} — ` +
+                  `${role}, created: ${created}, expires: ${expires}`
+                );
+              });
+              sections.push(
+                `**Reusable invitation links** (${linkInvites.length}):\n${lines.join("\n")}`,
+              );
+            }
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `${invites.length} invitation(s) found:\n\n` +
+                    sections.join("\n\n"),
+                },
+              ],
+            };
+          }
+
+          case "send": {
+            if (!params.emails || !Array.isArray(params.emails) || params.emails.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: emails array with at least one email address is required for send.",
+                  },
+                ],
+              };
+            }
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            const invalidEmails = params.emails.filter(
+              (e: string) => !emailRegex.test(e.trim()),
+            );
+            if (invalidEmails.length > 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: invalid email address(es): ${invalidEmails.join(", ")}`,
+                  },
+                ],
+              };
+            }
+
+            const streamIds = params.streamIds ?? [];
+
+            await sendZulipInvites(client, {
+              inviteeEmails: params.emails.map((e: string) => e.trim()).join(","),
+              streamIds,
+              inviteAs: params.inviteAs,
+              inviteExpiresInMinutes: params.expiresInMinutes,
+              includeRealmDefaultSubscriptions: params.includeDefaultSubscriptions,
+            });
+
+            const role = params.inviteAs
+              ? (INVITE_AS_LABELS[params.inviteAs] ?? `Role ${params.inviteAs}`)
+              : "Member";
+            const streamInfo = streamIds.length > 0
+              ? `, auto-subscribing to ${streamIds.length} stream(s)`
+              : "";
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Sent email invitation(s) to ${params.emails.length} address(es) as ${role}${streamInfo} \u2705\n` +
+                    `Recipients: ${params.emails.join(", ")}`,
+                },
+              ],
+            };
+          }
+
+          case "create_link": {
+            const streamIds = params.streamIds ?? [];
+
+            const result = await createZulipInviteLink(client, {
+              streamIds,
+              inviteAs: params.inviteAs,
+              inviteExpiresInMinutes: params.expiresInMinutes,
+              includeRealmDefaultSubscriptions: params.includeDefaultSubscriptions,
+            });
+
+            const role = params.inviteAs
+              ? (INVITE_AS_LABELS[params.inviteAs] ?? `Role ${params.inviteAs}`)
+              : "Member";
+            const expiresInfo =
+              params.expiresInMinutes === null
+                ? "Never expires"
+                : params.expiresInMinutes
+                  ? `Expires in ${params.expiresInMinutes} minutes`
+                  : "Uses server default expiry";
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Reusable invitation link created \u2705\n` +
+                    `- **Link**: ${result.invite_link}\n` +
+                    `- **Role**: ${role}\n` +
+                    `- **Expiry**: ${expiresInfo}\n` +
+                    (streamIds.length > 0
+                      ? `- **Auto-subscribe streams**: ${streamIds.join(", ")}\n`
+                      : "") +
+                    `\nShare this link with anyone you want to invite to the organization.`,
+                },
+              ],
+            };
+          }
+
+          case "revoke": {
+            if (!params.inviteId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: inviteId is required for revoke. Use 'list' to find invitation IDs.",
+                  },
+                ],
+              };
+            }
+            await revokeZulipInvite(client, params.inviteId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Email invitation ${params.inviteId} revoked \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "revoke_link": {
+            if (!params.inviteId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: inviteId is required for revoke_link. Use 'list' to find invitation IDs.",
+                  },
+                ],
+              };
+            }
+            await revokeZulipInviteLink(client, params.inviteId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Reusable invitation link ${params.inviteId} revoked \u2705`,
+                },
+              ],
+            };
+          }
+
+          case "resend": {
+            if (!params.inviteId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: inviteId is required for resend. Use 'list' to find email invitation IDs.",
+                  },
+                ],
+              };
+            }
+            await resendZulipInvite(client, params.inviteId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Email invitation ${params.inviteId} resent \u2705`,
                 },
               ],
             };
