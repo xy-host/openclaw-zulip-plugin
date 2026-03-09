@@ -514,6 +514,35 @@ List, create, or delete message reminders. Reminders schedule a Notification Bot
 - Reminders are delivered from Notification Bot as a DM to this account (the current bot), with a link back to the original message
 - Use reminders to create follow-up workflows: search for a message, set a reminder for later review
 
+
+
+### `zulip_invitations`
+Manage organization invitations: list, send, create reusable links, revoke, and resend. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `list` | — | List all unexpired invitations (email and reusable links) |
+| `send` | `emails` | Send email invitations to specified email addresses |
+| `create_link` | — | Create a reusable invitation link for multiple users |
+| `revoke` | `inviteId` | Revoke an email invitation |
+| `revoke_link` | `inviteId` | Revoke a reusable invitation link |
+| `resend` | `inviteId` | Resend an email invitation |
+
+**Parameters** (for send/create_link):
+- `emails` — Array of email addresses to invite (for send action)
+- `streamIds` — Array of stream IDs to auto-subscribe invited users to
+- `inviteAs` — Organization role: 100 (Owner), 200 (Admin), 300 (Moderator), 400 (Member, default), 600 (Guest)
+- `expiresInMinutes` — Expiration time in minutes; use null for no expiry; omit for server default (typically 10 days)
+- `includeDefaultSubscriptions` — Whether to also subscribe to organization default streams (default: true)
+
+**Tips**:
+- Use `list` to see all pending invitations and find their IDs for revoke/resend
+- Email invitations send a direct email to each recipient with a unique join link
+- Reusable links (`create_link`) can be shared with multiple people — useful for team onboarding
+- Use `revoke` for email invitations and `revoke_link` for reusable links — they use different endpoints
+- Use `resend` to re-send an email invitation if the recipient did not receive it or if it expired
+- Use `zulip_streams` → `list_all` to find stream IDs for auto-subscribing invited users
+- You can only invite users to roles that are equal to or less privileged than your own role
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:
