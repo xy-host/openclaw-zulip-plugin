@@ -57,6 +57,7 @@ Look up and manage users. Actions:
 | `get` | `userId` | Get a single user's details by ID |
 | `get_by_email` | `email` | Get a single user's details by email |
 | `presence` | `userId` | Check a user's online/idle/offline status |
+| `get_all_presence` | — | Get presence status of all users in the organization in one call |
 | `get_own_user` | — | Get the bot's own user ID, name, email, and profile details |
 
 **Tips**:
@@ -64,6 +65,7 @@ Look up and manage users. Actions:
 - Use `get_by_email` when you know someone's email but not their Zulip ID
 - The `presence` action shows per-client status (web, desktop, mobile) with last-seen timestamps
 - By default, `list` excludes bots and deactivated users — set `includeBots: true` or `includeDeactivated: true` to include them
+- Use `get_all_presence` to get a snapshot of who's online across the entire organization — much more efficient than querying individual users
 - Use `get_own_user` to discover the bot's own user ID — useful when you need to exclude the bot from user lists, check its profile, or pass its ID to other actions
 
 ### `zulip_messages`

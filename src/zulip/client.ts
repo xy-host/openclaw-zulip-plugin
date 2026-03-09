@@ -505,6 +505,22 @@ export type ZulipUserPresence = {
   presence: ZulipPresence;
 };
 
+export type ZulipRealmPresenceEntryValue = {
+  client?: string;
+  status: "active" | "idle" | "offline";
+  timestamp: number;
+  pushable?: boolean;
+};
+
+export type ZulipRealmPresenceEntry = {
+  [clientOrAggregated: string]: ZulipRealmPresenceEntryValue;
+};
+
+export type ZulipRealmPresenceResult = {
+  presences: Record<string, ZulipRealmPresenceEntry>;
+  server_timestamp: number;
+};
+
 export async function listZulipUsers(
   client: ZulipClient,
 ): Promise<ZulipUser[]> {
@@ -538,6 +554,25 @@ export async function getZulipUserPresence(
     `/users/${userId}/presence`,
   );
   return { presence: data.presence };
+}
+
+/**
+ * Get the presence information of all users in the organization.
+ * Returns a dictionary keyed by user email with their presence status.
+ * Much more efficient than querying individual user presence one at a time.
+ */
+export async function getZulipRealmPresence(
+  client: ZulipClient,
+): Promise<ZulipRealmPresenceResult> {
+  const data = await client.request<{
+    presences: Record<string, ZulipRealmPresenceEntry>;
+    server_timestamp: number;
+    result: string;
+  }>("/realm/presence");
+  return {
+    presences: data.presences ?? {},
+    server_timestamp: data.server_timestamp,
+  };
 }
 
 // ── Messages ──
