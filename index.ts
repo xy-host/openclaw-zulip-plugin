@@ -6099,16 +6099,25 @@ const plugin = {
         }
 
         const result = await renderZulipMessage(client, params.content);
+
+        // Choose a fence delimiter that does not appear in the rendered HTML
+        let fence = "```";
+        while (result.rendered.includes(fence)) {
+          fence += "`";
+        }
+
+        const renderedHtmlBlock =
+          "**Rendered HTML:**\n\n" +
+          fence + "html\n" +
+          result.rendered +
+          "\n" + fence + "\n\n" +
+          "This is how Zulip will render the provided markdown content.";
+
         return {
           content: [
             {
               type: "text",
-              text:
-                "**Rendered HTML:**\n\n" +
-                "```html\n" +
-                result.rendered +
-                "\n```\n\n" +
-                "This is how Zulip will render the provided markdown content.",
+              text: renderedHtmlBlock,
             },
           ],
         };
