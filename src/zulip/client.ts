@@ -1946,3 +1946,32 @@ export async function resendZulipInvite(
     { method: "POST" },
   );
 }
+
+// ── Render Message ──
+
+export type ZulipRenderResult = {
+  rendered: string;
+};
+
+/**
+ * Render a Zulip-flavored markdown message into HTML without sending it.
+ * Useful for previewing how content will appear, testing linkifiers,
+ * validating emoji/mentions, or generating rendered HTML.
+ *
+ * Uses POST /messages/render.
+ */
+export async function renderZulipMessage(
+  client: ZulipClient,
+  content: string,
+): Promise<ZulipRenderResult> {
+  const body = new URLSearchParams();
+  body.set("content", content);
+  const data = await client.request<{
+    rendered: string;
+    result: string;
+  }>("/messages/render", {
+    method: "POST",
+    body: body.toString(),
+  });
+  return { rendered: data.rendered };
+}
