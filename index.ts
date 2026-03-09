@@ -3501,7 +3501,8 @@ const plugin = {
                   type: "string",
                   description:
                     "Value to set for this field. Use an empty string to clear the field. " +
-                    "For 'List of options' fields, use the exact option text.",
+                    "For 'List of options' fields (type 3), use the option key/ID (not the display text). " +
+                    "Use 'profile_fields' action to see available option keys.",
                 },
               },
               required: ["id", "value"],
@@ -3571,9 +3572,9 @@ const plugin = {
                     string,
                     { text: string; order: string }
                   >;
-                  const optList = Object.values(parsed)
-                    .sort((a, b) => Number(a.order) - Number(b.order))
-                    .map((o) => o.text);
+                  const optList = Object.entries(parsed)
+                    .sort((a, b) => Number(a[1].order) - Number(b[1].order))
+                    .map(([key, o]) => `${o.text} (key: ${key})`);
                   if (optList.length > 0) {
                     options = ` [${optList.join(", ")}]`;
                   }

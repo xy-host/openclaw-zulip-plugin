@@ -319,11 +319,12 @@ Query server/organization info and custom profile fields. Actions:
 - Use `profile_fields` to discover what custom fields the organization has configured (e.g., Team, Role, Phone, Pronouns)
 - Use `user_profile` with a user ID to read that user's custom profile field values — great for looking up team membership, roles, etc.
 - Fields of type "List of options" (type 3) show their available options in the `profile_fields` output
+- Fields of type "List of options" (type 3) show their available options and corresponding option keys/IDs in the `profile_fields` output
 - Fields marked with ⭐ are displayed in profile summaries
 - Use `update_profile` to set the bot's own custom profile field values (e.g., team, role, pronouns)
 - `profileData` is an array of `{ id, value }` objects — use `profile_fields` to find field IDs first
 - Pass an empty string as `value` to clear a field
-- For "List of options" fields (type 3), use the exact option text as the value
+- For "List of options" fields (type 3), use the option key/ID as the `value` (not the human-readable text label); use `profile_fields` or `rendered_value` to map between keys and display text
 
 ### `zulip_message_flags`
 Manage personal message flags (star, read) and check read receipts. Actions:
