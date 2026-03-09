@@ -19,6 +19,7 @@ import {
   getZulipUser,
   getZulipUserByEmail,
   getZulipUserPresence,
+  getZulipRealmPresence,
   getZulipMessages,
   getZulipSingleMessage,
   updateZulipMessage,
@@ -685,6 +686,7 @@ const plugin = {
       description:
         "List, look up, or check presence of Zulip users, or get the bot's own user info. " +
         "Use to find user IDs for DMs, look up user details, check who is online, " +
+        "get a snapshot of all online/idle users in the organization, " +
         "or discover the bot's own user ID and profile.",
       parameters: {
         type: "object",
@@ -696,7 +698,7 @@ const plugin = {
           },
           action: {
             type: "string",
-            enum: ["list", "get", "get_by_email", "presence", "get_own_user"],
+            enum: ["list", "get", "get_by_email", "presence", "get_all_presence", "get_own_user"],
             description: "Action to perform",
           },
           userId: {
@@ -832,6 +834,80 @@ const plugin = {
                 {
                   type: "text",
                   text: `Presence for user ${params.userId}:\n${lines.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "get_all_presence": {
+            const realmPresence = await getZulipRealmPresence(client);
+            const entries = Object.entries(realmPresence.presences);
+            if (entries.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "No presence data available for the organization.",
+                  },
+                ],
+              };
+            }
+
+            // Categorize users by their aggregated status
+            const active: string[] = [];
+            const idle: string[] = [];
+            const offline: string[] = [];
+
+            for (const [email, presenceData] of entries) {
+              const aggregated =
+                presenceData.aggregated ?? presenceData.website;
+              if (!aggregated) {
+                offline.push(email);
+                continue;
+              }
+              // Consider users idle if their last activity was more than 5 minutes ago
+              const ageSeconds =
+                realmPresence.server_timestamp - aggregated.timestamp;
+              if (aggregated.status === "active" && ageSeconds <= 300) {
+                active.push(email);
+              } else if (
+                aggregated.status === "active" ||
+                aggregated.status === "idle"
+              ) {
+                idle.push(email);
+              } else {
+                offline.push(email);
+              }
+            }
+
+            const sections: string[] = [];
+            if (active.length > 0) {
+              sections.push(
+                `**🟢 Active** (${active.length}):\n` +
+                  active.map((e) => `  - ${e}`).join("\n"),
+              );
+            }
+            if (idle.length > 0) {
+              sections.push(
+                `**🟡 Idle** (${idle.length}):\n` +
+                  idle.map((e) => `  - ${e}`).join("\n"),
+              );
+            }
+
+            const serverTime = new Date(
+              realmPresence.server_timestamp * 1000,
+            ).toISOString();
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Organization presence (${entries.length} user(s), as of ${serverTime}):\n\n` +
+                    sections.join("\n\n") +
+                    (active.length === 0 && idle.length === 0
+                      ? "No users currently active or idle."
+                      : "") +
+                    `\n\nUse zulip_users → get_by_email to look up user details.`,
                 },
               ],
             };
