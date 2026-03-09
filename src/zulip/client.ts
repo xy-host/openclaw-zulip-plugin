@@ -1975,3 +1975,24 @@ export async function renderZulipMessage(
   });
   return { rendered: data.rendered };
 }
+
+// ── Own Profile Data ──
+
+/**
+ * Update the current user's (bot's) custom profile field values.
+ * Each entry maps a field ID to the value to set.
+ * Pass an empty string as the value to clear a field.
+ *
+ * Uses PATCH /users/me/profile_data.
+ */
+export async function updateZulipOwnProfileData(
+  client: ZulipClient,
+  data: Array<{ id: number; value: string }>,
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("profile_data", JSON.stringify(data));
+  await client.request<{ result: string }>("/users/me/profile_data", {
+    method: "PATCH",
+    body: body.toString(),
+  });
+}
