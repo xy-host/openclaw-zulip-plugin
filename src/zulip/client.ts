@@ -505,13 +505,15 @@ export type ZulipUserPresence = {
   presence: ZulipPresence;
 };
 
+export type ZulipRealmPresenceEntryValue = {
+  client?: string;
+  status: "active" | "idle" | "offline";
+  timestamp: number;
+  pushable?: boolean;
+};
+
 export type ZulipRealmPresenceEntry = {
-  [clientOrAggregated: string]: {
-    client: string;
-    status: "active" | "idle";
-    timestamp: number;
-    pushable?: boolean;
-  };
+  [clientOrAggregated: string]: ZulipRealmPresenceEntryValue;
 };
 
 export type ZulipRealmPresenceResult = {

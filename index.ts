@@ -856,13 +856,11 @@ const plugin = {
             // Categorize users by their aggregated status
             const active: string[] = [];
             const idle: string[] = [];
-            const offline: string[] = [];
 
             for (const [email, presenceData] of entries) {
               const aggregated =
                 presenceData.aggregated ?? presenceData.website;
               if (!aggregated) {
-                offline.push(email);
                 continue;
               }
               // Consider users idle if their last activity was more than 5 minutes ago
@@ -875,8 +873,6 @@ const plugin = {
                 aggregated.status === "idle"
               ) {
                 idle.push(email);
-              } else {
-                offline.push(email);
               }
             }
 
