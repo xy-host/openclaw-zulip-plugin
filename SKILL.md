@@ -312,6 +312,7 @@ Query server/organization info and custom profile fields. Actions:
 | `server_info` | — | Get server version, feature level, and organization metadata |
 | `profile_fields` | — | List custom profile fields configured for the organization |
 | `user_profile` | `userId` | Get a specific user's custom profile data |
+| `update_profile` | `profileData` | Update the bot's own custom profile field values |
 
 **Tips**:
 - Use `server_info` to check the Zulip server version and feature level — useful for knowing which API features are available
@@ -319,6 +320,10 @@ Query server/organization info and custom profile fields. Actions:
 - Use `user_profile` with a user ID to read that user's custom profile field values — great for looking up team membership, roles, etc.
 - Fields of type "List of options" (type 3) show their available options in the `profile_fields` output
 - Fields marked with ⭐ are displayed in profile summaries
+- Use `update_profile` to set the bot's own custom profile field values (e.g., team, role, pronouns)
+- `profileData` is an array of `{ id, value }` objects — use `profile_fields` to find field IDs first
+- Pass an empty string as `value` to clear a field
+- For "List of options" fields (type 3), use the exact option text as the value
 
 ### `zulip_message_flags`
 Manage personal message flags (star, read) and check read receipts. Actions:

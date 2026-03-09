@@ -91,6 +91,7 @@ import {
   resendZulipInvite,
   INVITE_AS_LABELS,
   renderZulipMessage,
+  updateZulipOwnProfileData,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -3461,9 +3462,9 @@ const plugin = {
       name: "zulip_server_settings",
       description:
         "Query Zulip server and organization information, list custom profile fields, " +
-        "or get a user's custom profile data. Use to check the server version and feature level, " +
-        "discover organization settings, or retrieve custom profile fields like team, role, " +
-        "phone number, or pronouns for any user.",
+        "get a user's custom profile data, or update the bot's own custom profile fields. " +
+        "Use to check the server version and feature level, discover organization settings, " +
+        "retrieve custom profile fields for any user, or set the bot's own profile values.",
       parameters: {
         type: "object",
         properties: {
@@ -3474,18 +3475,41 @@ const plugin = {
           },
           action: {
             type: "string",
-            enum: ["server_info", "profile_fields", "user_profile"],
+            enum: ["server_info", "profile_fields", "user_profile", "update_profile"],
             description:
               "Action to perform: 'server_info' returns server version, feature level, " +
               "and organization metadata; 'profile_fields' lists custom profile fields " +
               "configured for the organization; 'user_profile' returns a specific user's " +
-              "custom profile data.",
+              "custom profile data; 'update_profile' updates the bot's own custom profile field values.",
           },
           userId: {
             type: "number",
             description:
               "User ID to get custom profile data for (required for 'user_profile' action). " +
               "Use zulip_users to find user IDs.",
+          },
+          profileData: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: {
+                  type: "number",
+                  description: "Custom profile field ID. Use 'profile_fields' action to find IDs.",
+                },
+                value: {
+                  type: "string",
+                  description:
+                    "Value to set for this field. Use an empty string to clear the field. " +
+                    "For 'List of options' fields, use the exact option text.",
+                },
+              },
+              required: ["id", "value"],
+            },
+            description:
+              "Array of profile field updates for 'update_profile' action. " +
+              "Each entry has 'id' (field ID) and 'value' (new value). " +
+              "Use 'profile_fields' action first to discover available field IDs and types.",
           },
         },
         required: ["action"],
@@ -3610,6 +3634,51 @@ const plugin = {
                 {
                   type: "text",
                   text: `Custom profile data for user ${params.userId}:\n${lines.join("\n")}`,
+                },
+              ],
+            };
+          }
+
+          case "update_profile": {
+            const profileData = params.profileData;
+            if (!profileData || !Array.isArray(profileData) || profileData.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: profileData array is required for update_profile. " +
+                      "Each entry needs 'id' (field ID) and 'value' (new value). " +
+                      "Use 'profile_fields' action to discover available field IDs.",
+                  },
+                ],
+              };
+            }
+            const updates = profileData.map((entry: { id: number; value: string }) => ({
+              id: Number(entry.id),
+              value: String(entry.value ?? ""),
+            }));
+            // Validate all entries have numeric IDs
+            for (const u of updates) {
+              if (!Number.isFinite(u.id) || u.id <= 0) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Error: Invalid field ID '${u.id}'. Use 'profile_fields' action to find valid IDs.`,
+                    },
+                  ],
+                };
+              }
+            }
+            await updateZulipOwnProfileData(client, updates);
+            const summary = updates
+              .map((u) => `  - Field ${u.id}: ${u.value || "(cleared)"}`)
+              .join("\n");
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Updated ${updates.length} profile field(s):\n${summary}`,
                 },
               ],
             };
