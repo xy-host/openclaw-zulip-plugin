@@ -90,6 +90,7 @@ import {
   revokeZulipInviteLink,
   resendZulipInvite,
   INVITE_AS_LABELS,
+  renderZulipMessage,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -6055,6 +6056,74 @@ const plugin = {
         }
       },
     });
+
+    api.registerTool({
+      name: "zulip_render_message",
+      description:
+        "Render Zulip-flavored markdown content into HTML without sending a message. " +
+        "Use to preview how formatted content will appear in Zulip, test linkifier patterns, " +
+        "validate emoji names and user/stream mentions, or generate rendered HTML for external use. " +
+        "The input is processed exactly as Zulip would process a real message, including " +
+        "expanding custom emoji, linkifiers, @mentions, code blocks, LaTeX, and all other Zulip markdown features.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          content: {
+            type: "string",
+            description:
+              "Zulip markdown content to render. Supports all Zulip markdown features: " +
+              "bold, italic, lists, links, code blocks, LaTeX, emoji (:emoji_name:), " +
+              "user mentions (@**Name**), stream links (#**stream>topic**), etc.",
+          },
+        },
+        required: ["content"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        if (!params.content || typeof params.content !== "string" || params.content.trim().length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: "Error: content is required and must be a non-empty string.",
+              },
+            ],
+          };
+        }
+
+        const result = await renderZulipMessage(client, params.content);
+
+        // Choose a fence delimiter that does not appear in the rendered HTML
+        let fence = "```";
+        while (result.rendered.includes(fence)) {
+          fence += "`";
+        }
+
+        const renderedHtmlBlock =
+          "**Rendered HTML:**\n\n" +
+          fence + "html\n" +
+          result.rendered +
+          "\n" + fence + "\n\n" +
+          "This is how Zulip will render the provided markdown content.";
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: renderedHtmlBlock,
+            },
+          ],
+        };
+      },
+    });
+
 
   },
 };
