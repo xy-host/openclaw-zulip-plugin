@@ -542,7 +542,7 @@ Manage organization invitations: list, send, create reusable links, revoke, and 
 - Use `revoke` for email invitations and `revoke_link` for reusable links — they use different endpoints
 - Use `resend` to re-send an email invitation if the recipient did not receive it or if it expired
 - Use `zulip_streams` → `list_all` to find stream IDs for auto-subscribing invited users
-- You can only invite with roles equal or less privileged than your own
+- You can only invite users to roles that are equal to or less privileged than your own role
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:

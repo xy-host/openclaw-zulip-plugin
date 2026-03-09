@@ -2404,8 +2404,6 @@ const plugin = {
         }
       },
     });
-
-
     api.registerTool({
       name: "zulip_drafts",
       description:
@@ -3042,8 +3040,6 @@ const plugin = {
         }
       },
     });
-
-
     api.registerTool({
       name: "zulip_linkifiers",
       description:
@@ -4319,8 +4315,6 @@ const plugin = {
         }
       },
     });
-
-
     api.registerTool({
       name: "zulip_user_preferences",
       description:
@@ -5737,7 +5731,7 @@ const plugin = {
               "Organization role for invited users (for send/create_link): " +
               "100 = Organization owner, 200 = Organization administrator, " +
               "300 = Organization moderator, 400 = Member (default), 600 = Guest. " +
-              "You can only invite with roles equal or stricter than your own.",
+              "You can only invite users to roles that are equal to or less privileged than your own role.",
           },
           expiresInMinutes: {
             type: ["number", "null"],
@@ -5892,9 +5886,10 @@ const plugin = {
             const expiresInfo =
               params.expiresInMinutes === null
                 ? "Never expires"
-                : params.expiresInMinutes
-                  ? `Expires in ${params.expiresInMinutes} minutes`
-                  : "Uses server default expiry";
+                : params.expiresInMinutes === undefined
+                  ? "Uses server default expiry"
+                  : `Expires in ${params.expiresInMinutes} minutes`;
+
             return {
               content: [
                 {
