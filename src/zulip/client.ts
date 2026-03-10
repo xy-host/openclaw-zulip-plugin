@@ -1996,3 +1996,58 @@ export async function updateZulipOwnProfileData(
     body: body.toString(),
   });
 }
+
+// ── Default Streams ──
+
+/**
+ * List the streams that new users are auto-subscribed to when they join the organization.
+ * These are the "default streams" configured by organization administrators.
+ *
+ * Uses GET /default_streams.
+ */
+export async function listZulipDefaultStreams(
+  client: ZulipClient,
+): Promise<ZulipStream[]> {
+  const data = await client.request<{
+    default_streams: ZulipStream[];
+    result: string;
+  }>("/default_streams");
+  return data.default_streams ?? [];
+}
+
+/**
+ * Add a stream to the set of default streams that new users are auto-subscribed to.
+ * Requires organization administrator permissions.
+ *
+ * Uses POST /default_streams.
+ */
+export async function addZulipDefaultStream(
+  client: ZulipClient,
+  streamId: number,
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("stream_id", String(streamId));
+  await client.request<{ result: string }>("/default_streams", {
+    method: "POST",
+    body: body.toString(),
+  });
+}
+
+/**
+ * Remove a stream from the set of default streams.
+ * New users will no longer be auto-subscribed to this stream.
+ * Requires organization administrator permissions.
+ *
+ * Uses DELETE /default_streams.
+ */
+export async function removeZulipDefaultStream(
+  client: ZulipClient,
+  streamId: number,
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("stream_id", String(streamId));
+  await client.request<{ result: string }>("/default_streams", {
+    method: "DELETE",
+    body: body.toString(),
+  });
+}
