@@ -95,6 +95,7 @@ import {
   listZulipDefaultStreams,
   addZulipDefaultStream,
   removeZulipDefaultStream,
+  getZulipStreamId,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -6209,34 +6210,29 @@ const plugin = {
               };
             }
 
-            // Resolve stream name to ID
-            const stream =
-              (await listZulipSubscriptions(client)).find(
-                (s) =>
-                  s.name.toLowerCase() === params.streamName.toLowerCase(),
-              ) ??
-              (await listZulipStreams(client)).find(
-                (s) =>
-                  s.name.toLowerCase() === params.streamName.toLowerCase(),
-              );
-
-            if (!stream) {
+            // Resolve stream name to ID using the dedicated endpoint,
+            // which works for both public and private streams the bot can access.
+            let addStreamId: number;
+            const addStreamName: string = params.streamName;
+            try {
+              addStreamId = await getZulipStreamId(client, params.streamName);
+            } catch {
               return {
                 content: [
                   {
                     type: "text",
-                    text: `Error: stream "${params.streamName}" not found. Use zulip_streams → list_all to see available streams.`,
+                    text: `Error: stream "${params.streamName}" not found or not accessible. The stream must exist and the bot must have permission to view it.`,
                   },
                 ],
               };
             }
 
-            await addZulipDefaultStream(client, stream.stream_id);
+            await addZulipDefaultStream(client, addStreamId);
             return {
               content: [
                 {
                   type: "text",
-                  text: `Stream **${stream.name}** (id:${stream.stream_id}) added to default streams ✅\nNew users will now be auto-subscribed to this stream.`,
+                  text: `Stream **${addStreamName}** (id:${addStreamId}) added to default streams ✅\nNew users will now be auto-subscribed to this stream.`,
                 },
               ],
             };
@@ -6261,11 +6257,17 @@ const plugin = {
             );
 
             if (!defaultStream) {
-              // Stream might exist but not be a default stream
-              const allStream = (await listZulipStreams(client)).find(
-                (s) => s.name.toLowerCase() === params.streamName.toLowerCase(),
-              );
-              if (allStream) {
+              // Check if the stream exists at all using the dedicated endpoint,
+              // which works for both public and private streams.
+              let streamExists = false;
+              try {
+                await getZulipStreamId(client, params.streamName);
+                streamExists = true;
+              } catch {
+                // Stream not found or not accessible
+              }
+
+              if (streamExists) {
                 return {
                   content: [
                     {
@@ -6279,7 +6281,7 @@ const plugin = {
                 content: [
                   {
                     type: "text",
-                    text: `Error: stream "${params.streamName}" not found.`,
+                    text: `Error: stream "${params.streamName}" not found or not accessible (it may be private or you may not have permission to manage it).`,
                   },
                 ],
               };

@@ -2005,6 +2005,29 @@ export async function updateZulipOwnProfileData(
  *
  * Uses GET /default_streams.
  */
+
+// ── Stream ID lookup ──
+
+/**
+ * Look up a stream ID by name using the dedicated endpoint.
+ * Works for any stream the bot has permission to access, including
+ * private streams the bot is subscribed to.
+ *
+ * Uses GET /get_stream_id.
+ */
+export async function getZulipStreamId(
+  client: ZulipClient,
+  streamName: string,
+): Promise<number> {
+  const qs = new URLSearchParams();
+  qs.set("stream", streamName);
+  const data = await client.request<{
+    stream_id: number;
+    result: string;
+  }>(`/get_stream_id?${qs.toString()}`);
+  return data.stream_id;
+}
+
 export async function listZulipDefaultStreams(
   client: ZulipClient,
 ): Promise<ZulipStream[]> {

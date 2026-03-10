@@ -567,9 +567,9 @@ Manage default streams — the streams that new users are automatically subscrib
 **Tips**:
 - Use `list` to audit which streams new users are auto-subscribed to
 - Pair with `zulip_invitations` for complete onboarding workflows: set default streams, then send invitations
-- Use `zulip_streams` → `list_all` to find available stream names before adding
+- Use `zulip_streams` → `list_all` to find available public stream names before adding; private streams are resolved by name directly and the bot must have permission to access them
 - The `remove` action intelligently checks if the stream is actually in the default set before attempting removal
-- Private streams can also be default streams — new users will be auto-subscribed to them
+- Private streams can also be default streams — the bot resolves stream names using a dedicated lookup that works for both public and private streams it has access to
 - Changes take effect for future new users only — existing users' subscriptions are not affected
 
 ## Formatting (Zulip Markdown)
