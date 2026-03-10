@@ -2074,3 +2074,70 @@ export async function removeZulipDefaultStream(
     body: body.toString(),
   });
 }
+
+// ── Code Playgrounds ──
+
+export type ZulipCodePlayground = {
+  id: number;
+  name: string;
+  pygments_language: string;
+  url_template: string;
+};
+
+/**
+ * List all configured code playgrounds for the organization.
+ * Code playgrounds add a "Open in playground" button to code blocks
+ * in messages, linking to an online code editor for the language.
+ *
+ * Uses GET /realm/playgrounds.
+ */
+export async function listZulipCodePlaygrounds(
+  client: ZulipClient,
+): Promise<ZulipCodePlayground[]> {
+  const data = await client.request<{
+    playgrounds: ZulipCodePlayground[];
+    result: string;
+  }>("/realm/playgrounds");
+  return data.playgrounds ?? [];
+}
+
+/**
+ * Add a new code playground for the organization.
+ * Requires organization administrator permissions.
+ *
+ * Uses POST /realm/playgrounds.
+ */
+export async function addZulipCodePlayground(
+  client: ZulipClient,
+  params: {
+    name: string;
+    pygmentsLanguage: string;
+    urlTemplate: string;
+  },
+): Promise<{ id: number }> {
+  const body = new URLSearchParams();
+  body.set("name", params.name);
+  body.set("pygments_language", params.pygmentsLanguage);
+  body.set("url_template", params.urlTemplate);
+  const data = await client.request<{ id: number; result: string }>(
+    "/realm/playgrounds",
+    { method: "POST", body: body.toString() },
+  );
+  return { id: data.id };
+}
+
+/**
+ * Remove a code playground from the organization.
+ * Requires organization administrator permissions.
+ *
+ * Uses DELETE /realm/playgrounds/{playground_id}.
+ */
+export async function removeZulipCodePlayground(
+  client: ZulipClient,
+  playgroundId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/realm/playgrounds/${playgroundId}`,
+    { method: "DELETE" },
+  );
+}

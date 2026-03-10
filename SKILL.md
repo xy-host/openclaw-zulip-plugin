@@ -572,6 +572,29 @@ Manage default streams — the streams that new users are automatically subscrib
 - Private streams can also be default streams — the bot resolves stream names using a dedicated lookup that works for both public and private streams it has access to
 - Changes take effect for future new users only — existing users' subscriptions are not affected
 
+
+### `zulip_code_playgrounds`
+List, add, or remove code playgrounds in the Zulip organization. Code playgrounds add an "Open in playground" button to fenced code blocks in messages, linking to an online code editor. Requires admin permissions for add/remove. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `list` | — | List all configured code playgrounds grouped by language |
+| `add` | `name`, `pygmentsLanguage`, `urlTemplate` | Add a new code playground for a specific language (admin-only) |
+| `remove` | `playgroundId` | Remove a code playground by its ID (admin-only) |
+
+**Parameters**:
+- `name` — human-readable label for the playground (e.g. "Python 3 on Replit", "Go Playground")
+- `pygmentsLanguage` — the Pygments language identifier matching the code block language hint (e.g. "python", "javascript", "go", "rust", "typescript")
+- `urlTemplate` — URL template with a `{code}` placeholder that will be replaced with the code content (e.g. `https://replit.com/languages/python3#{code}`)
+- `playgroundId` — numeric playground ID (for remove). Use `list` to find IDs.
+
+**Tips**:
+- Playgrounds appear as an "Open in playground" option on code blocks that match the configured language
+- Multiple playgrounds can be configured for the same language — users will see all of them
+- The `pygmentsLanguage` must match the language hint in fenced code blocks (e.g. \`\`\`python)
+- Common playground URLs: Replit, Go Playground, TypeScript Playground, Rust Playground, JSFiddle
+- Use `list` to see all configured playgrounds grouped by language with their IDs
+
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:

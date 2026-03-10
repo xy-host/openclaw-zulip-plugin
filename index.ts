@@ -96,6 +96,9 @@ import {
   addZulipDefaultStream,
   removeZulipDefaultStream,
   getZulipStreamId,
+  listZulipCodePlaygrounds,
+  addZulipCodePlayground,
+  removeZulipCodePlayground,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -6373,6 +6376,200 @@ const plugin = {
             },
           ],
         };
+      },
+    });
+
+    api.registerTool({
+      name: "zulip_code_playgrounds",
+      description:
+        "List, add, or remove code playgrounds in the Zulip organization. " +
+        "Code playgrounds add an 'Open in playground' button to fenced code blocks " +
+        "in messages, linking to an online code editor for the corresponding language. " +
+        "For example, configuring a Python playground with 'https://replit.com/languages/python3#{code}' " +
+        "lets users open Python code blocks directly in Replit. " +
+        "Requires organization administrator permissions for add/remove actions.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["list", "add", "remove"],
+            description:
+              "Action to perform: " +
+              "'list' returns all configured code playgrounds with their IDs, names, languages, and URL templates; " +
+              "'add' creates a new code playground for a specific programming language (requires admin); " +
+              "'remove' deletes a code playground by its ID (requires admin).",
+          },
+          playgroundId: {
+            type: "number",
+            description:
+              "Code playground ID (for remove action). Use 'list' to find playground IDs.",
+          },
+          name: {
+            type: "string",
+            description:
+              "Human-readable name for the code playground (for add action), " +
+              "e.g. 'Python 3 on Replit', 'Go Playground', 'TypeScript Playground'. " +
+              "This label is shown in the 'Open in playground' menu.",
+          },
+          pygmentsLanguage: {
+            type: "string",
+            description:
+              "The Pygments language identifier that this playground applies to (for add action). " +
+              "This must match the language hint used in fenced code blocks. " +
+              "Common values: 'python', 'javascript', 'typescript', 'go', 'rust', 'java', " +
+              "'c', 'cpp', 'ruby', 'bash', 'sql', 'html', 'css', 'json', 'yaml', 'markdown'. " +
+              "Multiple playgrounds can be configured for the same language.",
+          },
+          urlTemplate: {
+            type: "string",
+            description:
+              "URL template using RFC 6570 syntax (for add action). " +
+              "Must include '{code}' placeholder which will be replaced with the URL-encoded code block content. " +
+              "Examples: 'https://replit.com/languages/python3#{code}', " +
+              "'https://go.dev/play/p/?code={code}', " +
+              "'https://www.typescriptlang.org/play?#code/{code}'.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "list": {
+            const playgrounds = await listZulipCodePlaygrounds(client);
+            if (playgrounds.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "No code playgrounds configured. " +
+                      "Use 'add' to configure playgrounds that add 'Open in playground' buttons to code blocks.",
+                  },
+                ],
+              };
+            }
+
+            // Group playgrounds by language for cleaner output
+            const byLang = new Map<string, typeof playgrounds>();
+            for (const pg of playgrounds) {
+              const lang = pg.pygments_language;
+              if (!byLang.has(lang)) byLang.set(lang, []);
+              byLang.get(lang)!.push(pg);
+            }
+
+            const sections: string[] = [];
+            for (const [lang, pgs] of [...byLang.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+              const lines = pgs.map(
+                (pg) => `  - **[${pg.id}]** ${pg.name} → ${pg.url_template}`,
+              );
+              sections.push(`**${lang}** (${pgs.length}):\n${lines.join("\n")}`);
+            }
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `${playgrounds.length} code playground(s) configured:\n\n` +
+                    sections.join("\n\n"),
+                },
+              ],
+            };
+          }
+
+          case "add": {
+            if (!params.name) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: name is required for add. " +
+                      "Provide a human-readable label like 'Python 3 on Replit'.",
+                  },
+                ],
+              };
+            }
+            if (!params.pygmentsLanguage) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: pygmentsLanguage is required for add. " +
+                      "Provide the Pygments language identifier (e.g. 'python', 'javascript', 'go').",
+                  },
+                ],
+              };
+            }
+            if (!params.urlTemplate) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: urlTemplate is required for add. " +
+                      "Provide a URL template with a {code} placeholder " +
+                      "(e.g. 'https://replit.com/languages/python3#{code}').",
+                  },
+                ],
+              };
+            }
+
+            const result = await addZulipCodePlayground(client, {
+              name: params.name,
+              pygmentsLanguage: params.pygmentsLanguage,
+              urlTemplate: params.urlTemplate,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Code playground added (id:${result.id}) ✅\n` +
+                    `- **Name**: ${params.name}\n` +
+                    `- **Language**: ${params.pygmentsLanguage}\n` +
+                    `- **URL template**: ${params.urlTemplate}\n\n` +
+                    `Code blocks with \`\`\`${params.pygmentsLanguage} will now show an "Open in playground" option.`,
+                },
+              ],
+            };
+          }
+
+          case "remove": {
+            if (!params.playgroundId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: playgroundId is required for remove. Use 'list' to find playground IDs.",
+                  },
+                ],
+              };
+            }
+            await removeZulipCodePlayground(client, params.playgroundId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Code playground ${params.playgroundId} removed ✅`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
       },
     });
 

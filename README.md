@@ -110,6 +110,7 @@ All agent tools accept an optional `accountId` parameter to target a specific Zu
 | `zulip_saved_snippets` | List, create, edit, or delete reusable text snippets (Zulip 10.0+) |
 | `zulip_reminders` | List, create, or delete message reminders for follow-up notifications (Zulip 11.0+) |
 | `zulip_invitations` | List, send, create links, revoke, and resend organization invitations |
+| `zulip_code_playgrounds` | List, add, or remove code playgrounds that add "Open in playground" buttons to code blocks |
 
 ## Configuration
 
