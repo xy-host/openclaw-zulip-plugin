@@ -99,6 +99,11 @@ import {
   listZulipCodePlaygrounds,
   addZulipCodePlayground,
   removeZulipCodePlayground,
+  createZulipUser,
+  deactivateZulipUser,
+  reactivateZulipUser,
+  updateZulipUser,
+  USER_ROLE_LABELS,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -693,10 +698,12 @@ const plugin = {
     api.registerTool({
       name: "zulip_users",
       description:
-        "List, look up, or check presence of Zulip users, or get the bot's own user info. " +
+        "List, look up, create, update, deactivate, reactivate, or check presence of Zulip users. " +
         "Use to find user IDs for DMs, look up user details, check who is online, " +
         "get a snapshot of all online/idle users in the organization, " +
-        "or discover the bot's own user ID and profile.",
+        "discover the bot's own user ID and profile, " +
+        "or perform admin operations like creating new users, updating roles/names, " +
+        "and deactivating/reactivating accounts (admin permissions required for admin actions).",
       parameters: {
         type: "object",
         properties: {
@@ -707,12 +714,12 @@ const plugin = {
           },
           action: {
             type: "string",
-            enum: ["list", "get", "get_by_email", "presence", "get_all_presence", "get_own_user"],
+            enum: ["list", "get", "get_by_email", "presence", "get_all_presence", "get_own_user", "create", "update", "deactivate", "reactivate"],
             description: "Action to perform",
           },
           userId: {
             type: "number",
-            description: "User ID (for get/presence)",
+            description: "User ID (for get/presence/update/deactivate/reactivate)",
           },
           email: {
             type: "string",
@@ -726,6 +733,36 @@ const plugin = {
           includeBots: {
             type: "boolean",
             description: "Include bot users in list results (default: false)",
+          },
+          fullName: {
+            type: "string",
+            description:
+              "Full name for the user (for create, or to update a user's name with update action)",
+          },
+          newEmail: {
+            type: "string",
+            description:
+              "Email address for the new user (for create action). Must be a valid email.",
+          },
+          password: {
+            type: "string",
+            description:
+              "Password for the new user (for create action). Required when creating a user.",
+          },
+          role: {
+            type: "number",
+            enum: [100, 200, 300, 400, 600],
+            description:
+              "Organization role to assign (for create/update): " +
+              "100 = Organization owner, 200 = Organization administrator, " +
+              "300 = Organization moderator, 400 = Member (default), 600 = Guest. " +
+              "You can only assign roles equal to or less privileged than your own.",
+          },
+          deactivationNotificationComment: {
+            type: "string",
+            description:
+              "Optional comment included in the notification email sent to the deactivated user " +
+              "(for deactivate action). Requires Zulip 5.0+.",
           },
         },
         required: ["action"],
@@ -925,6 +962,179 @@ const plugin = {
                 {
                   type: "text",
                   text: formatUserDetails(ownUser),
+                },
+              ],
+            };
+          }
+
+          case "create": {
+            if (!params.newEmail) {
+              return {
+                content: [
+                  { type: "text", text: "Error: newEmail is required for create." },
+                ],
+              };
+            }
+            if (!params.password) {
+              return {
+                content: [
+                  { type: "text", text: "Error: password is required for create." },
+                ],
+              };
+            }
+            if (!params.fullName || !params.fullName.trim()) {
+              return {
+                content: [
+                  { type: "text", text: "Error: fullName is required for create and must not be blank." },
+                ],
+              };
+            }
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(params.newEmail.trim())) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: newEmail must be a valid email address.",
+                  },
+                ],
+              };
+            }
+            const result = await createZulipUser(client, {
+              email: params.newEmail.trim(),
+              password: params.password,
+              fullName: params.fullName.trim(),
+            });
+            const roleLabel = params.role
+              ? (USER_ROLE_LABELS[params.role] ?? `Role ${params.role}`)
+              : "Member";
+            // If a non-default role was requested, update it after creation
+            if (params.role && params.role !== 400) {
+              try {
+                await updateZulipUser(client, result.user_id, { role: params.role });
+              } catch (roleErr) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text:
+                        `User created (id:${result.user_id}, email: ${params.newEmail}) \u2705\n` +
+                        `\u26a0\ufe0f Warning: failed to set role to ${roleLabel}: ${String(roleErr)}\n` +
+                        `The user was created with the default Member role. Use the update action to change their role.`,
+                    },
+                  ],
+                };
+              }
+            }
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `User created \u2705\n` +
+                    `- **Name**: ${params.fullName.trim()}\n` +
+                    `- **Email**: ${params.newEmail.trim()}\n` +
+                    `- **ID**: ${result.user_id}\n` +
+                    `- **Role**: ${roleLabel}`,
+                },
+              ],
+            };
+          }
+
+          case "update": {
+            if (!params.userId) {
+              return {
+                content: [
+                  { type: "text", text: "Error: userId is required for update." },
+                ],
+              };
+            }
+            if (!params.fullName && params.role === undefined) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide fullName and/or role to update.",
+                  },
+                ],
+              };
+            }
+            if (params.fullName !== undefined && !params.fullName.trim()) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: fullName must not be blank.",
+                  },
+                ],
+              };
+            }
+            const updateParams: { fullName?: string; role?: number } = {};
+            if (params.fullName) updateParams.fullName = params.fullName.trim();
+            if (params.role !== undefined) updateParams.role = params.role;
+            await updateZulipUser(client, params.userId, updateParams);
+            const changes: string[] = [];
+            if (updateParams.fullName) changes.push(`Name: ${updateParams.fullName}`);
+            if (updateParams.role !== undefined) {
+              const label = USER_ROLE_LABELS[updateParams.role] ?? `Role ${updateParams.role}`;
+              changes.push(`Role: ${label}`);
+            }
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `User ${params.userId} updated \u2705\n` +
+                    changes.map((c) => `- ${c}`).join("\n"),
+                },
+              ],
+            };
+          }
+
+          case "deactivate": {
+            if (!params.userId) {
+              return {
+                content: [
+                  { type: "text", text: "Error: userId is required for deactivate." },
+                ],
+              };
+            }
+            await deactivateZulipUser(client, params.userId, {
+              deactivationNotificationComment: params.deactivationNotificationComment,
+            });
+            const commentInfo = params.deactivationNotificationComment
+              ? ` (notification comment: "${params.deactivationNotificationComment}")`
+              : "";
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `User ${params.userId} deactivated \u2705${commentInfo}\n` +
+                    `The user has been logged out of all sessions, their bots deactivated, ` +
+                    `and their invitations disabled. Message history is preserved.\n` +
+                    `Use the reactivate action to restore access.`,
+                },
+              ],
+            };
+          }
+
+          case "reactivate": {
+            if (!params.userId) {
+              return {
+                content: [
+                  { type: "text", text: "Error: userId is required for reactivate." },
+                ],
+              };
+            }
+            await reactivateZulipUser(client, params.userId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `User ${params.userId} reactivated \u2705\n` +
+                    `The user can now log in again. Their previous bots and settings may need to be re-enabled separately.`,
                 },
               ],
             };
