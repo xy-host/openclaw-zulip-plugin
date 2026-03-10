@@ -6535,7 +6535,7 @@ const plugin = {
                     `- **Name**: ${params.name}\n` +
                     `- **Language**: ${params.pygmentsLanguage}\n` +
                     `- **URL template**: ${params.urlTemplate}\n\n` +
-                    `Code blocks with \`\`\`${params.pygmentsLanguage} will now show an "Open in playground" option.`,
+                    `Code blocks tagged with the "${params.pygmentsLanguage}" language hint will now show an "Open in playground" option.`,
                 },
               ],
             };

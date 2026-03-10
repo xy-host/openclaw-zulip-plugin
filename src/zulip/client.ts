@@ -2086,7 +2086,7 @@ export type ZulipCodePlayground = {
 
 /**
  * List all configured code playgrounds for the organization.
- * Code playgrounds add a "Open in playground" button to code blocks
+ * Code playgrounds add an "Open in playground" button to code blocks
  * in messages, linking to an online code editor for the language.
  *
  * Uses GET /realm/playgrounds.
