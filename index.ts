@@ -6975,7 +6975,8 @@ const plugin = {
                     `- **Name**: ${params.name}\n` +
                     `- **Type**: ${typeName}\n` +
                     (extras.length > 0 ? extras.map((e) => `- ${e}`).join("\n") + "\n" : "") +
-                    `\nUse zulip_server_settings → update_profile to set values for users.`,
+                    `\nUse zulip_server_settings → update_profile to set values for this bot/current account's custom profile fields.\n` +
+                    `To read other users' profile data, use zulip_server_settings → user_profile.`,
                 },
               ],
             };
@@ -7120,6 +7121,32 @@ const plugin = {
                   {
                     type: "text",
                     text: `Error: invalid field ID(s): ${JSON.stringify(invalidIds)}. All IDs must be positive integers.`,
+                  },
+                ],
+              };
+            }
+
+            // Validate there are no duplicate IDs
+            const uniqueIds = new Set(params.orderedIds as number[]);
+            if (uniqueIds.size !== params.orderedIds.length) {
+              const seen = new Set<number>();
+              const duplicateIds = (params.orderedIds as number[]).filter((id) => {
+                if (seen.has(id)) {
+                  return true;
+                }
+                seen.add(id);
+                return false;
+              });
+
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: duplicate field ID(s) in orderedIds: " +
+                      JSON.stringify(duplicateIds) +
+                      ". Each custom profile field ID must appear exactly once in the desired order. " +
+                      "Use zulip_server_settings → profile_fields to see all current field IDs.",
                   },
                 ],
               };
