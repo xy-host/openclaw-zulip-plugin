@@ -611,6 +611,44 @@ List, add, or remove code playgrounds in the Zulip organization. Code playground
 - Common playground URLs: Replit, Go Playground, TypeScript Playground, Rust Playground, JSFiddle
 - Use `list` to see all configured playgrounds grouped by language with their IDs
 
+
+### `zulip_profile_fields`
+Create, update, delete, or reorder custom profile fields in the Zulip organization. Requires admin permissions. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `create` | `name`, `fieldType` | Create a new custom profile field |
+| `update` | `fieldId` (+ properties to change) | Update a field's name, hint, options, or display settings |
+| `delete` | `fieldId` | Permanently delete a field and all associated user data |
+| `reorder` | `orderedIds` | Change the display order of all profile fields |
+
+**Create parameters**:
+- `name` — display name for the field (e.g. "Team", "Phone Number", "GitHub Username")
+- `fieldType` — field type (required, cannot be changed after creation):
+  - 1 = Short text, 2 = Long text, 3 = List of options, 4 = Date picker
+  - 5 = Link, 6 = Person picker, 7 = External account, 8 = Pronouns
+- `hint` — help text shown below the field in settings UI
+- `fieldData` — JSON string for type-specific config:
+  - Type 3 (List of options): `'{"0":{"text":"Engineering","order":"1"},"1":{"text":"Design","order":"2"}}'`
+  - Type 7 (External account): `'{"subtype":"github"}'` or `'{"subtype":"custom","url_pattern":"https://example.com/%(username)s"}'`
+- `displayInProfileSummary` — show in user popover cards (Zulip 6.0+)
+- `required` — make the field mandatory for users (Zulip 9.0+)
+
+**Update parameters**:
+- `fieldId` — field ID to update (use `zulip_server_settings` → `profile_fields` to find IDs)
+- Any of: `name`, `hint`, `fieldData`, `displayInProfileSummary`, `required`
+
+**Reorder parameters**:
+- `orderedIds` — array of ALL profile field IDs in desired display order
+
+**Tips**:
+- Use `zulip_server_settings` → `profile_fields` to list existing fields and find IDs
+- Use `zulip_server_settings` → `update_profile` to set values on the bot's own profile
+- Use `zulip_server_settings` → `user_profile` to read any user's profile field values
+- Deleting a field is permanent — all user data for that field is lost
+- When reordering, you must include every existing field ID exactly once
+- The `fieldType` cannot be changed after a field is created — delete and recreate if you need a different type
+
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:
