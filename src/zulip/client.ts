@@ -2252,3 +2252,114 @@ export async function updateZulipUser(
     { method: "PATCH", body: body.toString() },
   );
 }
+
+// ── Custom Profile Field Management ──
+
+/**
+ * Create a new custom profile field for the organization.
+ * Requires organization administrator permissions.
+ *
+ * Uses POST /realm/profile_fields.
+ *
+ * @param fieldType - Field type: 1=Short text, 2=Long text, 3=List of options,
+ *   4=Date picker, 5=Link, 6=Person picker, 7=External account, 8=Pronouns
+ */
+export async function createZulipCustomProfileField(
+  client: ZulipClient,
+  params: {
+    name: string;
+    hint?: string;
+    fieldType: number;
+    fieldData?: string;
+    displayInProfileSummary?: boolean;
+    required?: boolean;
+  },
+): Promise<{ id: number }> {
+  const body = new URLSearchParams();
+  body.set("name", params.name);
+  body.set("field_type", String(params.fieldType));
+  if (params.hint !== undefined) body.set("hint", params.hint);
+  if (params.fieldData !== undefined) body.set("field_data", params.fieldData);
+  if (params.displayInProfileSummary !== undefined) {
+    body.set("display_in_profile_summary", String(params.displayInProfileSummary));
+  }
+  if (params.required !== undefined) {
+    body.set("required", String(params.required));
+  }
+  const data = await client.request<{ id: number; result: string }>(
+    "/realm/profile_fields",
+    { method: "POST", body: body.toString() },
+  );
+  return { id: data.id };
+}
+
+/**
+ * Update an existing custom profile field definition.
+ * Requires organization administrator permissions.
+ *
+ * Uses PATCH /realm/profile_fields/{field_id}.
+ */
+export async function updateZulipCustomProfileField(
+  client: ZulipClient,
+  fieldId: number,
+  params: {
+    name?: string;
+    hint?: string;
+    fieldData?: string;
+    displayInProfileSummary?: boolean;
+    required?: boolean;
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  if (params.name !== undefined) body.set("name", params.name);
+  if (params.hint !== undefined) body.set("hint", params.hint);
+  if (params.fieldData !== undefined) body.set("field_data", params.fieldData);
+  if (params.displayInProfileSummary !== undefined) {
+    body.set("display_in_profile_summary", String(params.displayInProfileSummary));
+  }
+  if (params.required !== undefined) {
+    body.set("required", String(params.required));
+  }
+  await client.request<{ result: string }>(
+    `/realm/profile_fields/${fieldId}`,
+    { method: "PATCH", body: body.toString() },
+  );
+}
+
+/**
+ * Delete a custom profile field from the organization.
+ * All user data associated with this field will be lost.
+ * Requires organization administrator permissions.
+ *
+ * Uses DELETE /realm/profile_fields/{field_id}.
+ */
+export async function deleteZulipCustomProfileField(
+  client: ZulipClient,
+  fieldId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/realm/profile_fields/${fieldId}`,
+    { method: "DELETE" },
+  );
+}
+
+/**
+ * Reorder the custom profile fields in the organization.
+ * Requires organization administrator permissions.
+ *
+ * Uses PATCH /realm/profile_fields with an `order` parameter.
+ *
+ * @param orderedIds - Array of all custom profile field IDs in the desired display order.
+ *   Must include every existing field ID exactly once.
+ */
+export async function reorderZulipCustomProfileFields(
+  client: ZulipClient,
+  orderedIds: number[],
+): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("order", JSON.stringify(orderedIds));
+  await client.request<{ result: string }>(
+    "/realm/profile_fields",
+    { method: "PATCH", body: body.toString() },
+  );
+}

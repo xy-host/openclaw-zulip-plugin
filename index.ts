@@ -104,6 +104,10 @@ import {
   reactivateZulipUser,
   updateZulipUser,
   USER_ROLE_LABELS,
+  createZulipCustomProfileField,
+  updateZulipCustomProfileField,
+  deleteZulipCustomProfileField,
+  reorderZulipCustomProfileFields,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -6784,6 +6788,390 @@ const plugin = {
     });
 
 
+
+    api.registerTool({
+      name: "zulip_profile_fields",
+      description:
+        "Create, update, delete, or reorder custom profile fields in the Zulip organization. " +
+        "Custom profile fields appear on user profiles and can store information like team, role, " +
+        "phone number, pronouns, or any organization-specific data. " +
+        "Use to set up new profile fields, modify existing ones, change their display order, " +
+        "or remove fields that are no longer needed. " +
+        "Requires organization administrator permissions for all actions. " +
+        "To list existing fields or read/write user profile data, use zulip_server_settings instead.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["create", "update", "delete", "reorder"],
+            description:
+              "Action to perform: " +
+              "'create' adds a new custom profile field to the organization, " +
+              "'update' modifies an existing field's name, hint, options, or display settings, " +
+              "'delete' permanently removes a field and all associated user data, " +
+              "'reorder' changes the display order of all profile fields.",
+          },
+          fieldId: {
+            type: "number",
+            description:
+              "Profile field ID (for update/delete). " +
+              "Use zulip_server_settings → profile_fields to find field IDs.",
+          },
+          name: {
+            type: "string",
+            description:
+              "Display name for the profile field (for create/update), " +
+              "e.g. 'Team', 'Phone Number', 'GitHub Username', 'Department'.",
+          },
+          fieldType: {
+            type: "number",
+            enum: [1, 2, 3, 4, 5, 6, 7, 8],
+            description:
+              "Field type (required for create): " +
+              "1 = Short text, 2 = Long text, 3 = List of options, " +
+              "4 = Date picker, 5 = Link, 6 = Person picker, " +
+              "7 = External account, 8 = Pronouns. " +
+              "Cannot be changed after creation.",
+          },
+          hint: {
+            type: "string",
+            description:
+              "Help text shown below the field in the settings UI (for create/update). " +
+              "E.g. 'Your team within the organization', 'Include country code'.",
+          },
+          fieldData: {
+            type: "string",
+            description:
+              "JSON string with field-type-specific configuration (for create/update). " +
+              "Required for type 3 (List of options): a JSON object mapping option keys to " +
+              "{text, order} objects, e.g. '{\"0\":{\"text\":\"Engineering\",\"order\":\"1\"},\"1\":{\"text\":\"Design\",\"order\":\"2\"}}'. " +
+              "Required for type 7 (External account): a JSON object with 'subtype' " +
+              "and optional 'url_pattern', e.g. '{\"subtype\":\"github\"}' or " +
+              "'{\"subtype\":\"custom\",\"url_pattern\":\"https://example.com/%(username)s\"}'.",
+          },
+          displayInProfileSummary: {
+            type: "boolean",
+            description:
+              "Whether to show this field in the user's profile summary card (for create/update). " +
+              "Profile summary fields are shown prominently in user popover cards. " +
+              "Requires Zulip 6.0+.",
+          },
+          required: {
+            type: "boolean",
+            description:
+              "Whether this field is required for users to fill out (for create/update). " +
+              "Requires Zulip 9.0+.",
+          },
+          orderedIds: {
+            type: "array",
+            items: { type: "number" },
+            description:
+              "Array of all profile field IDs in the desired display order (for reorder). " +
+              "Must include every existing field ID exactly once. " +
+              "Use zulip_server_settings → profile_fields to see all current field IDs.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "create": {
+            if (!params.name) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: name is required for create. " +
+                      "Provide a display name like 'Team', 'Phone Number', etc.",
+                  },
+                ],
+              };
+            }
+            if (params.fieldType === undefined || params.fieldType === null) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: fieldType is required for create. " +
+                      "Values: 1=Short text, 2=Long text, 3=List of options, " +
+                      "4=Date picker, 5=Link, 6=Person picker, 7=External account, 8=Pronouns.",
+                  },
+                ],
+              };
+            }
+
+            // Validate fieldData for types that require it
+            if (params.fieldType === 3 && !params.fieldData) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: fieldData is required for type 3 (List of options). " +
+                      "Provide a JSON string like: " +
+                      "'{\"0\":{\"text\":\"Option A\",\"order\":\"1\"},\"1\":{\"text\":\"Option B\",\"order\":\"2\"}}'",
+                  },
+                ],
+              };
+            }
+            if (params.fieldType === 7 && !params.fieldData) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: fieldData is required for type 7 (External account). " +
+                      "Provide a JSON string like: '{\"subtype\":\"github\"}' " +
+                      "or '{\"subtype\":\"custom\",\"url_pattern\":\"https://example.com/%(username)s\"}'.",
+                  },
+                ],
+              };
+            }
+
+            // Validate fieldData is valid JSON if provided
+            if (params.fieldData) {
+              try {
+                JSON.parse(params.fieldData);
+              } catch {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: "Error: fieldData must be a valid JSON string.",
+                    },
+                  ],
+                };
+              }
+            }
+
+            const result = await createZulipCustomProfileField(client, {
+              name: params.name,
+              hint: params.hint,
+              fieldType: params.fieldType,
+              fieldData: params.fieldData,
+              displayInProfileSummary: params.displayInProfileSummary,
+              required: params.required,
+            });
+
+            const typeName = getProfileFieldTypeName(params.fieldType);
+            const extras: string[] = [];
+            if (params.hint) extras.push(`Hint: "${params.hint}"`);
+            if (params.displayInProfileSummary) extras.push("Shown in profile summary ⭐");
+            if (params.required) extras.push("Required ⚠️");
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Custom profile field created (id:${result.id}) ✅\n` +
+                    `- **Name**: ${params.name}\n` +
+                    `- **Type**: ${typeName}\n` +
+                    (extras.length > 0 ? extras.map((e) => `- ${e}`).join("\n") + "\n" : "") +
+                    `\nUse zulip_server_settings → update_profile to set values for this bot/current account's custom profile fields.\n` +
+                    `To read other users' profile data, use zulip_server_settings → user_profile.`,
+                },
+              ],
+            };
+          }
+
+          case "update": {
+            if (!params.fieldId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: fieldId is required for update. " +
+                      "Use zulip_server_settings → profile_fields to find field IDs.",
+                  },
+                ],
+              };
+            }
+            if (
+              params.name === undefined &&
+              params.hint === undefined &&
+              params.fieldData === undefined &&
+              params.displayInProfileSummary === undefined &&
+              params.required === undefined
+            ) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: provide at least one property to update: " +
+                      "name, hint, fieldData, displayInProfileSummary, or required.",
+                  },
+                ],
+              };
+            }
+
+            // Validate fieldData is valid JSON if provided
+            if (params.fieldData !== undefined) {
+              try {
+                JSON.parse(params.fieldData);
+              } catch {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: "Error: fieldData must be a valid JSON string.",
+                    },
+                  ],
+                };
+              }
+            }
+
+            await updateZulipCustomProfileField(client, params.fieldId, {
+              name: params.name,
+              hint: params.hint,
+              fieldData: params.fieldData,
+              displayInProfileSummary: params.displayInProfileSummary,
+              required: params.required,
+            });
+
+            const changes: string[] = [];
+            if (params.name !== undefined) changes.push(`Name: "${params.name}"`);
+            if (params.hint !== undefined) changes.push(`Hint: "${params.hint}"`);
+            if (params.fieldData !== undefined) changes.push("Field data updated");
+            if (params.displayInProfileSummary !== undefined) {
+              changes.push(
+                `Profile summary: ${params.displayInProfileSummary ? "Shown ⭐" : "Hidden"}`,
+              );
+            }
+            if (params.required !== undefined) {
+              changes.push(
+                `Required: ${params.required ? "Yes ⚠️" : "No"}`,
+              );
+            }
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Custom profile field ${params.fieldId} updated ✅\n` +
+                    changes.map((c) => `- ${c}`).join("\n"),
+                },
+              ],
+            };
+          }
+
+          case "delete": {
+            if (!params.fieldId) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: fieldId is required for delete. " +
+                      "Use zulip_server_settings → profile_fields to find field IDs.",
+                  },
+                ],
+              };
+            }
+
+            await deleteZulipCustomProfileField(client, params.fieldId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Custom profile field ${params.fieldId} deleted ✅\n` +
+                    `All user data associated with this field has been permanently removed.`,
+                },
+              ],
+            };
+          }
+
+          case "reorder": {
+            if (
+              !params.orderedIds ||
+              !Array.isArray(params.orderedIds) ||
+              params.orderedIds.length === 0
+            ) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: orderedIds array is required for reorder. " +
+                      "Must include all profile field IDs in the desired order. " +
+                      "Use zulip_server_settings → profile_fields to see all current field IDs.",
+                  },
+                ],
+              };
+            }
+
+            // Validate all entries are positive integers
+            const invalidIds = params.orderedIds.filter(
+              (id: unknown) =>
+                typeof id !== "number" ||
+                !Number.isFinite(id) ||
+                !Number.isInteger(id) ||
+                (id as number) <= 0,
+            );
+            if (invalidIds.length > 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: invalid field ID(s): ${JSON.stringify(invalidIds)}. All IDs must be positive integers.`,
+                  },
+                ],
+              };
+            }
+
+            // Validate there are no duplicate IDs
+            const uniqueIds = new Set(params.orderedIds as number[]);
+            if (uniqueIds.size !== params.orderedIds.length) {
+              const seen = new Set<number>();
+              const duplicateIds = (params.orderedIds as number[]).filter((id) => {
+                if (seen.has(id)) {
+                  return true;
+                }
+                seen.add(id);
+                return false;
+              });
+
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text:
+                      "Error: duplicate field ID(s) in orderedIds: " +
+                      JSON.stringify(duplicateIds) +
+                      ". Each custom profile field ID must appear exactly once in the desired order. " +
+                      "Use zulip_server_settings → profile_fields to see all current field IDs.",
+                  },
+                ],
+              };
+            }
+
+            await reorderZulipCustomProfileFields(client, params.orderedIds);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Custom profile fields reordered ✅ (new order: ${params.orderedIds.join(", ")})`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
   },
 };
 
