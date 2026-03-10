@@ -982,10 +982,10 @@ const plugin = {
                 ],
               };
             }
-            if (!params.fullName) {
+            if (!params.fullName || !params.fullName.trim()) {
               return {
                 content: [
-                  { type: "text", text: "Error: fullName is required for create." },
+                  { type: "text", text: "Error: fullName is required for create and must not be blank." },
                 ],
               };
             }
@@ -1055,6 +1055,16 @@ const plugin = {
                   {
                     type: "text",
                     text: "Error: provide fullName and/or role to update.",
+                  },
+                ],
+              };
+            }
+            if (params.fullName !== undefined && !params.fullName.trim()) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: fullName must not be blank.",
                   },
                 ],
               };
