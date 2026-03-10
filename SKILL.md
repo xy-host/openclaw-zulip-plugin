@@ -551,6 +551,27 @@ Manage organization invitations: list, send, create reusable links, revoke, and 
 - Use `resend` to re-send an email invitation if the recipient did not receive it or if it expired
 - Use `zulip_streams` → `list_all` to find stream IDs for auto-subscribing invited users
 - You can only invite users to roles that are equal to or less privileged than your own role
+
+### `zulip_default_streams`
+Manage default streams — the streams that new users are automatically subscribed to when they join the organization. Useful for onboarding workflows. Requires admin permissions for add/remove. Actions:
+
+| Action | Required params | Description |
+|---|---|---|
+| `list` | — | List all default streams that new users are auto-subscribed to |
+| `add` | `streamName` | Add a stream to the default set (admin-only) |
+| `remove` | `streamName` | Remove a stream from the default set (admin-only) |
+
+**Parameters**:
+- `streamName` — the plain stream name (for add/remove). The stream must already exist.
+
+**Tips**:
+- Use `list` to audit which streams new users are auto-subscribed to
+- Pair with `zulip_invitations` for complete onboarding workflows: set default streams, then send invitations
+- Use `zulip_streams` → `list_all` to find available public stream names before adding; private streams are resolved by name directly and the bot must have permission to access them
+- The `remove` action intelligently checks if the stream is actually in the default set before attempting removal
+- Private streams can also be default streams — the bot resolves stream names using a dedicated lookup that works for both public and private streams it has access to
+- Changes take effect for future new users only — existing users' subscriptions are not affected
+
 ## Formatting (Zulip Markdown)
 
 Zulip uses its own markdown variant. Key differences from other platforms:

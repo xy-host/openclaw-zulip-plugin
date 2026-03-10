@@ -92,6 +92,10 @@ import {
   INVITE_AS_LABELS,
   renderZulipMessage,
   updateZulipOwnProfileData,
+  listZulipDefaultStreams,
+  addZulipDefaultStream,
+  removeZulipDefaultStream,
+  getZulipStreamId,
 } from "./src/zulip/client.js";
 import { resolveZulipAccount } from "./src/zulip/accounts.js";
 
@@ -6126,6 +6130,184 @@ const plugin = {
         }
       },
     });
+    api.registerTool({
+      name: "zulip_default_streams",
+      description:
+        "Manage default streams in the Zulip organization. Default streams are the streams " +
+        "that new users are automatically subscribed to when they join. " +
+        "Use to onboard new members efficiently, audit which streams are included in the default set, " +
+        "or update the default stream list as the organization evolves. " +
+        "Complements the zulip_invitations tool for user onboarding workflows. " +
+        "Requires organization administrator permissions for add/remove actions.",
+      parameters: {
+        type: "object",
+        properties: {
+          accountId: {
+            type: "string",
+            description:
+              "Zulip account ID to use (for multi-account setups). Defaults to the primary account.",
+          },
+          action: {
+            type: "string",
+            enum: ["list", "add", "remove"],
+            description:
+              "Action to perform: " +
+              "'list' returns all streams that new users are auto-subscribed to, " +
+              "'add' adds a stream to the default set (requires admin), " +
+              "'remove' removes a stream from the default set (requires admin).",
+          },
+          streamName: {
+            type: "string",
+            description:
+              "Stream name to add to or remove from the default set (for add/remove actions). " +
+              "The stream must already exist. Use zulip_streams → list_all to find stream names.",
+          },
+        },
+        required: ["action"],
+      },
+      async execute(_id: string, params: any) {
+        const cfg = api.runtime.config.loadConfig();
+        const client = getClient(cfg, params.accountId);
+
+        switch (params.action) {
+          case "list": {
+            const defaults = await listZulipDefaultStreams(client);
+            if (defaults.length === 0) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "No default streams configured. New users will not be auto-subscribed to any streams.",
+                  },
+                ],
+              };
+            }
+            const lines = defaults.map(
+              (s) =>
+                `- **${s.name}** (id:${s.stream_id})${s.invite_only ? " 🔒 private" : ""}${s.description ? ` — ${s.description}` : ""}`,
+            );
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `${defaults.length} default stream(s) (new users are auto-subscribed to these):\n\n` +
+                    lines.join("\n"),
+                },
+              ],
+            };
+          }
+
+          case "add": {
+            if (!params.streamName) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: streamName is required for add. Use zulip_streams → list_all to find stream names.",
+                  },
+                ],
+              };
+            }
+
+            // Resolve stream name to ID using the dedicated endpoint,
+            // which works for both public and private streams the bot can access.
+            let addStreamId: number;
+            const addStreamName: string = params.streamName;
+            try {
+              addStreamId = await getZulipStreamId(client, params.streamName);
+            } catch {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: stream "${params.streamName}" not found or not accessible. The stream must exist and the bot must have permission to view it.`,
+                  },
+                ],
+              };
+            }
+
+            await addZulipDefaultStream(client, addStreamId);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Stream **${addStreamName}** (id:${addStreamId}) added to default streams ✅\nNew users will now be auto-subscribed to this stream.`,
+                },
+              ],
+            };
+          }
+
+          case "remove": {
+            if (!params.streamName) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: streamName is required for remove. Use the 'list' action to see current default streams.",
+                  },
+                ],
+              };
+            }
+
+            // Resolve stream name to ID — check default streams first for exact match
+            const defaults = await listZulipDefaultStreams(client);
+            const defaultStream = defaults.find(
+              (s) => s.name.toLowerCase() === params.streamName.toLowerCase(),
+            );
+
+            if (!defaultStream) {
+              // Check if the stream exists at all using the dedicated endpoint,
+              // which works for both public and private streams.
+              let streamExists = false;
+              try {
+                await getZulipStreamId(client, params.streamName);
+                streamExists = true;
+              } catch {
+                // Stream not found or not accessible
+              }
+
+              if (streamExists) {
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: `Stream "${params.streamName}" exists but is not currently a default stream. No changes made.`,
+                    },
+                  ],
+                };
+              }
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: stream "${params.streamName}" not found or not accessible (it may be private or you may not have permission to manage it).`,
+                  },
+                ],
+              };
+            }
+
+            await removeZulipDefaultStream(client, defaultStream.stream_id);
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Stream **${defaultStream.name}** (id:${defaultStream.stream_id}) removed from default streams ✅\nNew users will no longer be auto-subscribed to this stream.`,
+                },
+              ],
+            };
+          }
+
+          default:
+            return {
+              content: [
+                { type: "text", text: `Unknown action: ${params.action}` },
+              ],
+            };
+        }
+      },
+    });
+
 
     api.registerTool({
       name: "zulip_render_message",
