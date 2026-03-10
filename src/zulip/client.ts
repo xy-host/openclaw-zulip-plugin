@@ -2141,3 +2141,202 @@ export async function removeZulipCodePlayground(
     { method: "DELETE" },
   );
 }
+
+// ── User Admin ──
+
+/**
+ * Human-readable labels for Zulip user roles.
+ */
+export const USER_ROLE_LABELS: Record<number, string> = {
+  100: "Organization owner",
+  200: "Organization administrator",
+  300: "Organization moderator",
+  400: "Member",
+  600: "Guest",
+};
+
+/**
+ * Create a new user in the organization.
+ * Requires admin permissions and the `can_create_users` permission.
+ *
+ * Uses POST /users.
+ */
+export async function createZulipUser(
+  client: ZulipClient,
+  params: {
+    email: string;
+    password: string;
+    fullName: string;
+  },
+): Promise<{ user_id: number }> {
+  const body = new URLSearchParams();
+  body.set("email", params.email);
+  body.set("password", params.password);
+  body.set("full_name", params.fullName);
+  const data = await client.request<{
+    user_id: number;
+    result: string;
+  }>("/users", {
+    method: "POST",
+    body: body.toString(),
+  });
+  return { user_id: data.user_id };
+}
+
+/**
+ * Deactivate a user account. The user is immediately logged out of all sessions,
+ * their bots are deactivated, and their invitations are disabled.
+ * This preserves message history (preferred over deletion).
+ * Requires organization administrator permissions.
+ * Admins cannot deactivate organization owners.
+ *
+ * Uses DELETE /users/{user_id}.
+ */
+export async function deactivateZulipUser(
+  client: ZulipClient,
+  userId: number,
+  params?: {
+    deactivationNotificationComment?: string;
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  if (params?.deactivationNotificationComment) {
+    body.set("deactivation_notification_comment", params.deactivationNotificationComment);
+  }
+  await client.request<{ result: string }>(
+    `/users/${userId}`,
+    {
+      method: "DELETE",
+      ...(body.toString() ? { body: body.toString() } : {}),
+    },
+  );
+}
+
+/**
+ * Reactivate a previously deactivated user account.
+ * Requires organization administrator permissions.
+ *
+ * Uses POST /users/{user_id}/reactivate.
+ */
+export async function reactivateZulipUser(
+  client: ZulipClient,
+  userId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/users/${userId}/reactivate`,
+    { method: "POST" },
+  );
+}
+
+/**
+ * Update a users full name and/or role.
+
+// ── User Admin ──
+
+/**
+ * Human-readable labels for Zulip user roles.
+ */
+export const USER_ROLE_LABELS: Record<number, string> = {
+  100: "Organization owner",
+  200: "Organization administrator",
+  300: "Organization moderator",
+  400: "Member",
+  600: "Guest",
+};
+
+/**
+ * Create a new user in the organization.
+ * Requires admin permissions and the can_create_users permission.
+ *
+ * Uses POST /users.
+ */
+export async function createZulipUser(
+  client: ZulipClient,
+  params: {
+    email: string;
+    password: string;
+    fullName: string;
+  },
+): Promise<{ user_id: number }> {
+  const body = new URLSearchParams();
+  body.set("email", params.email);
+  body.set("password", params.password);
+  body.set("full_name", params.fullName);
+  const data = await client.request<{
+    user_id: number;
+    result: string;
+  }>("/users", {
+    method: "POST",
+    body: body.toString(),
+  });
+  return { user_id: data.user_id };
+}
+
+/**
+ * Deactivate a user account. The user is immediately logged out of all sessions,
+ * their bots are deactivated, and their invitations are disabled.
+ * This preserves message history (preferred over deletion).
+ * Requires organization administrator permissions.
+ * Admins cannot deactivate organization owners.
+ *
+ * Uses DELETE /users/{user_id}.
+ */
+export async function deactivateZulipUser(
+  client: ZulipClient,
+  userId: number,
+  params?: {
+    deactivationNotificationComment?: string;
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  if (params?.deactivationNotificationComment) {
+    body.set("deactivation_notification_comment", params.deactivationNotificationComment);
+  }
+  await client.request<{ result: string }>(
+    `/users/${userId}`,
+    {
+      method: "DELETE",
+      ...(body.toString() ? { body: body.toString() } : {}),
+    },
+  );
+}
+
+/**
+ * Reactivate a previously deactivated user account.
+ * Requires organization administrator permissions.
+ *
+ * Uses POST /users/{user_id}/reactivate.
+ */
+export async function reactivateZulipUser(
+  client: ZulipClient,
+  userId: number,
+): Promise<void> {
+  await client.request<{ result: string }>(
+    `/users/${userId}/reactivate`,
+    { method: "POST" },
+  );
+}
+
+/**
+ * Update a user's full name and/or role.
+ * Requires organization administrator permissions.
+ * Role values: 100=owner, 200=admin, 300=moderator, 400=member, 600=guest.
+ *
+ * Uses PATCH /users/{user_id}.
+ */
+export async function updateZulipUser(
+  client: ZulipClient,
+  userId: number,
+  params: {
+    fullName?: string;
+    role?: number;
+  },
+): Promise<void> {
+  const body = new URLSearchParams();
+  if (params.fullName !== undefined) body.set("full_name", params.fullName);
+  if (params.role !== undefined) body.set("role", String(params.role));
+  await client.request<{ result: string }>(
+    `/users/${userId}`,
+    { method: "PATCH", body: body.toString() },
+  );
+}

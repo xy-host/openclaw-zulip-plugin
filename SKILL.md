@@ -49,7 +49,7 @@ Manage streams. Actions:
 - The response shows how many users were subscribed vs. already subscribed
 
 ### `zulip_users`
-Look up and manage users. Actions:
+Look up, manage, and administer users. Actions:
 
 | Action | Required params | Description |
 |---|---|---|
@@ -59,6 +59,17 @@ Look up and manage users. Actions:
 | `presence` | `userId` | Check a user's online/idle/offline status |
 | `get_all_presence` | — | Get presence status of all users in the organization in one call |
 | `get_own_user` | — | Get the bot's own user ID, name, email, and profile details |
+| `create` | `newEmail`, `password`, `fullName` | Create a new user account (admin-only) |
+| `update` | `userId` + `fullName` and/or `role` | Update a user's name or organization role (admin-only) |
+| `deactivate` | `userId` | Deactivate a user account (admin-only) |
+| `reactivate` | `userId` | Reactivate a previously deactivated user (admin-only) |
+
+**Admin action parameters**:
+- `newEmail` — email address for the new user (for create)
+- `password` — password for the new user (for create)
+- `fullName` — full name for the user (for create, or to update a user's name with update)
+- `role` — organization role: 100 (Owner), 200 (Admin), 300 (Moderator), 400 (Member, default), 600 (Guest) (for create/update)
+- `deactivationNotificationComment` — optional comment included in the notification email sent to the deactivated user (for deactivate, requires Zulip 5.0+)
 
 **Tips**:
 - Use `list` to find user IDs when you need to send a DM
@@ -67,6 +78,11 @@ Look up and manage users. Actions:
 - By default, `list` excludes bots and deactivated users — set `includeBots: true` or `includeDeactivated: true` to include them
 - Use `get_all_presence` to get a snapshot of who's online across the entire organization — much more efficient than querying individual users
 - Use `get_own_user` to discover the bot's own user ID — useful when you need to exclude the bot from user lists, check its profile, or pass its ID to other actions
+- **create** requires admin permissions and the `can_create_users` permission — the user is created with a password and can log in immediately
+- **update** can change a user's name and/or organization role — you can only assign roles equal to or less privileged than your own
+- **deactivate** immediately logs the user out of all sessions, deactivates their bots, and disables their invitations — message history is preserved (preferred over deletion)
+- **reactivate** restores a deactivated user's access — they can log in again with their previous credentials
+- Admins cannot deactivate organization owners — use role changes first if needed
 
 ### `zulip_messages`
 Search, fetch, edit, delete, forward messages, manage emoji reactions, and view edit history. Actions:
