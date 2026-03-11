@@ -20,6 +20,7 @@ import {
   getZulipUserByEmail,
   getZulipUserPresence,
   getZulipRealmPresence,
+  updateZulipOwnPresence,
   getZulipMessages,
   getZulipSingleMessage,
   updateZulipMessage,
@@ -702,8 +703,9 @@ const plugin = {
     api.registerTool({
       name: "zulip_users",
       description:
-        "List, look up, create, update, deactivate, reactivate, or check presence of Zulip users. " +
+        "List, look up, create, update, deactivate, reactivate, or check/set presence of Zulip users. " +
         "Use to find user IDs for DMs, look up user details, check who is online, " +
+        "set the bot's own presence status (active/idle) to appear online, " +
         "get a snapshot of all online/idle users in the organization, " +
         "discover the bot's own user ID and profile, " +
         "or perform admin operations like creating new users, updating roles/names, " +
@@ -718,7 +720,7 @@ const plugin = {
           },
           action: {
             type: "string",
-            enum: ["list", "get", "get_by_email", "presence", "get_all_presence", "get_own_user", "create", "update", "deactivate", "reactivate"],
+            enum: ["list", "get", "get_by_email", "presence", "get_all_presence", "set_presence", "get_own_user", "create", "update", "deactivate", "reactivate"],
             description: "Action to perform",
           },
           userId: {
@@ -767,6 +769,24 @@ const plugin = {
             description:
               "Optional comment included in the notification email sent to the deactivated user " +
               "(for deactivate action). Requires Zulip 5.0+.",
+          },
+          presenceStatus: {
+            type: "string",
+            enum: ["active", "idle"],
+            description:
+              "Presence status to report (for set_presence action): " +
+              "'active' = the bot has recently been active/interacting, " +
+              "'idle' = the bot has not been actively interacting. " +
+              "Clients typically send 'active' every ~60 seconds to stay online. " +
+              "If no presence update is sent for ~140 seconds the server marks the user offline.",
+          },
+          pingOnly: {
+            type: "boolean",
+            description:
+              "When true, only updates the last-activity timestamp without changing the " +
+              "presence status value (for set_presence action). Defaults to false. " +
+              "Useful for keeping the bot marked as online without changing its active/idle state. " +
+              "Requires Zulip 10.0+ (feature level 300).",
           },
         },
         required: ["action"],
@@ -954,6 +974,78 @@ const plugin = {
                       ? "No users currently active or idle."
                       : "") +
                     `\n\nUse zulip_users → get_by_email to look up user details.`,
+                },
+              ],
+            };
+          }
+
+          case "set_presence": {
+            if (!params.presenceStatus) {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: presenceStatus is required for set_presence. " +
+                      "Use \"active\" or \"idle\".",
+                  },
+                ],
+              };
+            }
+            if (params.presenceStatus !== "active" && params.presenceStatus !== "idle") {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: presenceStatus must be \"active\" or \"idle\".",
+                  },
+                ],
+              };
+            }
+
+            const presenceResult = await updateZulipOwnPresence(client, {
+              status: params.presenceStatus,
+              pingOnly: params.pingOnly === true ? true : undefined,
+            });
+
+            const serverTime = new Date(
+              presenceResult.server_timestamp * 1000,
+            ).toISOString();
+
+            // Show the bot's own updated presence from the response
+            const ownPresences = Object.entries(presenceResult.presences);
+            const presenceLines: string[] = [];
+            for (const [email, presenceData] of ownPresences) {
+              const clients = Object.entries(presenceData);
+              for (const [clientName, info] of clients) {
+                const ts = new Date(info.timestamp * 1000).toISOString();
+                const emoji =
+                  info.status === "active"
+                    ? "\ud83d\udfe2"
+                    : info.status === "idle"
+                      ? "\ud83d\udfe1"
+                      : "\u26ab";
+                presenceLines.push(
+                  `  - ${emoji} **${clientName}**: ${info.status} (last seen: ${ts})`,
+                );
+              }
+            }
+
+            const presenceDetail = presenceLines.length > 0
+              ? `\nCurrent presence:\n${presenceLines.join("\n")}`
+              : "";
+            const pingNote = params.pingOnly === true
+              ? " (ping only \u2014 timestamp updated without changing status)"
+              : "";
+
+            return {
+              content: [
+                {
+                  type: "text",
+                  text:
+                    `Presence set to **${params.presenceStatus}**${pingNote} \u2705 ` +
+                    `(server time: ${serverTime})${presenceDetail}\n\n` +
+                    `Note: Presence expires after ~140 seconds of inactivity. ` +
+                    `Call set_presence periodically (~every 60s) to stay online.`,
                 },
               ],
             };

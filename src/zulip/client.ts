@@ -505,6 +505,20 @@ export type ZulipUserPresence = {
   presence: ZulipPresence;
 };
 
+export type ZulipRealmPresenceEntry = {
+  [clientOrAggregated: string]: {
+    client: string;
+    status: "active" | "idle";
+    timestamp: number;
+    pushable?: boolean;
+  };
+};
+
+export type ZulipRealmPresenceResult = {
+  presences: Record<string, ZulipRealmPresenceEntry>;
+  server_timestamp: number;
+};
+
 export type ZulipRealmPresenceEntryValue = {
   client?: string;
   status: "active" | "idle" | "offline";
@@ -569,6 +583,59 @@ export async function getZulipRealmPresence(
     server_timestamp: number;
     result: string;
   }>("/realm/presence");
+  return {
+    presences: data.presences ?? {},
+    server_timestamp: data.server_timestamp,
+  };
+}
+
+
+
+// ── Own Presence ──
+
+export type ZulipOwnPresenceResult = {
+  presences: Record<string, ZulipRealmPresenceEntry>;
+  server_timestamp: number;
+};
+
+/**
+ * Update the current user’s (bot’s) presence status.
+ * Clients are expected to call this approximately every minute to keep
+ * the user appearing as online. If no update is sent for ~140 seconds,
+ * the server marks the user as offline.
+ *
+ * Uses POST /users/me/presence.
+ *
+ * @param status - "active" (recently interacted) or "idle" (no recent interaction).
+ * @param pingOnly - When true, only updates the last-active timestamp without
+ *   changing the status value (default: false). Requires Zulip 10.0+ (feature level 300).
+ * @param newClientName - Optional client identifier string sent as the
+ *   "new_user_input" parameter (default: "true" for active, "false" for idle).
+ */
+export async function updateZulipOwnPresence(
+  client: ZulipClient,
+  params: {
+    status: "active" | "idle";
+    pingOnly?: boolean;
+    newClientName?: string;
+  },
+): Promise<ZulipOwnPresenceResult> {
+  const body = new URLSearchParams();
+  body.set("status", params.status);
+  if (params.pingOnly === true) {
+    body.set("ping_only", "true");
+  }
+  if (params.newClientName !== undefined) {
+    body.set("new_user_input", params.newClientName);
+  }
+  const data = await client.request<{
+    presences: Record<string, ZulipRealmPresenceEntry>;
+    server_timestamp: number;
+    result: string;
+  }>("/users/me/presence", {
+    method: "POST",
+    body: body.toString(),
+  });
   return {
     presences: data.presences ?? {},
     server_timestamp: data.server_timestamp,
