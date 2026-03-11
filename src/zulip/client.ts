@@ -505,20 +505,6 @@ export type ZulipUserPresence = {
   presence: ZulipPresence;
 };
 
-export type ZulipRealmPresenceEntry = {
-  [clientOrAggregated: string]: {
-    client: string;
-    status: "active" | "idle";
-    timestamp: number;
-    pushable?: boolean;
-  };
-};
-
-export type ZulipRealmPresenceResult = {
-  presences: Record<string, ZulipRealmPresenceEntry>;
-  server_timestamp: number;
-};
-
 export type ZulipRealmPresenceEntryValue = {
   client?: string;
   status: "active" | "idle" | "offline";
@@ -609,15 +595,16 @@ export type ZulipOwnPresenceResult = {
  * @param status - "active" (recently interacted) or "idle" (no recent interaction).
  * @param pingOnly - When true, only updates the last-active timestamp without
  *   changing the status value (default: false). Requires Zulip 10.0+ (feature level 300).
- * @param newClientName - Optional client identifier string sent as the
- *   "new_user_input" parameter (default: "true" for active, "false" for idle).
+ * @param newUserInput - Whether there has been new user interaction since the
+ *   last presence update. Sent as the "new_user_input" parameter.
+ *   Defaults to true when status is "active", false when "idle".
  */
 export async function updateZulipOwnPresence(
   client: ZulipClient,
   params: {
     status: "active" | "idle";
     pingOnly?: boolean;
-    newClientName?: string;
+    newUserInput?: boolean;
   },
 ): Promise<ZulipOwnPresenceResult> {
   const body = new URLSearchParams();
@@ -625,9 +612,9 @@ export async function updateZulipOwnPresence(
   if (params.pingOnly === true) {
     body.set("ping_only", "true");
   }
-  if (params.newClientName !== undefined) {
-    body.set("new_user_input", params.newClientName);
-  }
+  // Default new_user_input: true for active, false for idle
+  const newUserInput = params.newUserInput ?? (params.status === "active");
+  body.set("new_user_input", String(newUserInput));
   const data = await client.request<{
     presences: Record<string, ZulipRealmPresenceEntry>;
     server_timestamp: number;
