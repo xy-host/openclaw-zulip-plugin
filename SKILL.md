@@ -58,6 +58,7 @@ Look up, manage, and administer users. Actions:
 | `get_by_email` | `email` | Get a single user's details by email |
 | `presence` | `userId` | Check a user's online/idle/offline status |
 | `get_all_presence` | — | Get presence status of all users in the organization in one call |
+| `set_presence` | `presenceStatus` | Set the bot's own presence status (active/idle) to appear online |
 | `get_own_user` | — | Get the bot's own user ID, name, email, and profile details |
 | `create` | `newEmail`, `password`, `fullName` | Create a new user account (admin-only) |
 | `update` | `userId` + `fullName` and/or `role` | Update a user's name or organization role (admin-only) |
@@ -77,6 +78,8 @@ Look up, manage, and administer users. Actions:
 - The `presence` action shows per-client status (web, desktop, mobile) with last-seen timestamps
 - By default, `list` excludes bots and deactivated users — set `includeBots: true` or `includeDeactivated: true` to include them
 - Use `get_all_presence` to get a snapshot of who's online across the entire organization — much more efficient than querying individual users
+- Use `set_presence` to report the bot's online status — call with `presenceStatus: "active"` approximately every 60 seconds to keep the bot appearing online in Zulip; if no update is sent for ~140 seconds, the server marks the bot as offline
+- `set_presence` also accepts `pingOnly: true` to refresh the last-activity timestamp without changing the active/idle status (requires Zulip 10.0+)
 - Use `get_own_user` to discover the bot's own user ID — useful when you need to exclude the bot from user lists, check its profile, or pass its ID to other actions
 - **create** requires admin permissions and the `can_create_users` permission — the user is created with a password and can log in immediately
 - **update** can change a user's name and/or organization role — you can only assign roles equal to or less privileged than your own

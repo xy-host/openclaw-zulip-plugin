@@ -575,6 +575,60 @@ export async function getZulipRealmPresence(
   };
 }
 
+
+
+// ── Own Presence ──
+
+export type ZulipOwnPresenceResult = {
+  presences: Record<string, ZulipRealmPresenceEntry>;
+  server_timestamp: number;
+};
+
+/**
+ * Update the current user’s (bot’s) presence status.
+ * Clients are expected to call this approximately every minute to keep
+ * the user appearing as online. If no update is sent for ~140 seconds,
+ * the server marks the user as offline.
+ *
+ * Uses POST /users/me/presence.
+ *
+ * @param status - "active" (recently interacted) or "idle" (no recent interaction).
+ * @param pingOnly - When true, only updates the last-active timestamp without
+ *   changing the status value (default: false). Requires Zulip 10.0+ (feature level 300).
+ * @param newUserInput - Whether there has been new user interaction since the
+ *   last presence update. Sent as the "new_user_input" parameter.
+ *   Defaults to true when status is "active", false when "idle".
+ */
+export async function updateZulipOwnPresence(
+  client: ZulipClient,
+  params: {
+    status: "active" | "idle";
+    pingOnly?: boolean;
+    newUserInput?: boolean;
+  },
+): Promise<ZulipOwnPresenceResult> {
+  const body = new URLSearchParams();
+  body.set("status", params.status);
+  if (params.pingOnly === true) {
+    body.set("ping_only", "true");
+  }
+  // Default new_user_input: true for active, false for idle
+  const newUserInput = params.newUserInput ?? (params.status === "active");
+  body.set("new_user_input", String(newUserInput));
+  const data = await client.request<{
+    presences: Record<string, ZulipRealmPresenceEntry>;
+    server_timestamp: number;
+    result: string;
+  }>("/users/me/presence", {
+    method: "POST",
+    body: body.toString(),
+  });
+  return {
+    presences: data.presences ?? {},
+    server_timestamp: data.server_timestamp,
+  };
+}
+
 // ── Messages ──
 
 export type ZulipMessageDetails = {
